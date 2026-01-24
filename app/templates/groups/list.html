@@ -4,29 +4,27 @@
 {% block content %}
 <div class="container py-4">
 
-    <!-- Header -->
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h4 class="mb-1 fw-semibold">My Groups</h4>
-        <small class="text-muted">
-            You are part of {{ groups|length }} group{{ 's' if groups|length != 1 else '' }}
-        </small>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1 fw-semibold">My Groups</h4>
+            <small class="text-muted">
+                You are part of {{ groups|length }} group{{ 's' if groups|length != 1 else '' }}
+            </small>
+        </div>
+
+        {# Only show the top-right button if groups actually exist #}
+        {% if groups %}
+        <a href="{{ url_for('groups.create_group') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i> Create Group
+        </a>
+        {% endif %}
     </div>
-    <a href="{{ url_for('groups.create_group') }}" class="btn btn-primary">
-        <i class="bi bi-plus-lg me-1"></i> Create Group
-    </a>
-</div>
-
-
-
 
     {% if groups %}
-    <!-- Search Box -->
     <div class="mb-4">
         <input type="text" id="groupSearch" class="form-control" placeholder="Search groups..." aria-label="Search groups" style="max-width: 300px;">
     </div>
 
-    <!-- Card Grid -->
     <div class="row g-3" id="groupsContainer">
         {% for group in groups %}
         <div class="col-md-6 col-lg-4 group-card" data-name="{{ group.name|lower }}">
@@ -55,14 +53,12 @@
     }
     </style>
 
-    <!-- No Results -->
     <div id="noResults" class="text-center py-5 d-none">
         <i class="bi bi-search text-muted fs-1"></i>
         <p class="text-muted mt-3 mb-0">No groups match your search</p>
     </div>
 
     {% else %}
-    <!-- Empty State -->
     <div class="text-center py-5">
         <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-4" style="width: 80px; height: 80px;">
             <i class="bi bi-people fs-2 text-muted"></i>

@@ -21,7 +21,7 @@
                             <div class="mb-3">
                                 <label class="form-label fw-bold small">Minimum EMI Duration (Months)</label>
                                 <input type="number" name="min_emi_duration" class="form-control form-control-lg"
-                                       value="{{ group.min_emi_duration_months or 1 }}" min="1" max="60">
+                                       value="{{ group.min_emi_duration_months if group.min_emi_duration_months is not none else 3 }}" min="1" max="60">
                                 <div class="form-text">The shortest timeframe allowed for any member to repay a loan.</div>
                             </div>
                         </div>
@@ -39,47 +39,47 @@
             </div>
 
             {% if is_admin %}
-<div class="card border-danger">
-    <div class="card-header bg-danger text-white py-3">
-        <i class="bi bi-exclamation-triangle me-2"></i> Danger Zone
-    </div>
-    <div class="card-body p-4">
-        <h6 class="fw-bold mb-3">Delete Group</h6>
-        <p class="text-muted small mb-4">
-            This will permanently delete the group and all its data.
-            This action cannot be undone.
-        </p>
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white py-3">
+                    <i class="bi bi-exclamation-triangle me-2"></i> Danger Zone
+                </div>
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-3">Delete Group</h6>
+                    <p class="text-muted small mb-4">
+                        This will permanently delete the group and all its data.
+                        This action cannot be undone.
+                    </p>
 
-        <!-- Conditions Check -->
-        {% set total_members = members|length %}
-        {% set current_balance = wallet.balance if wallet else 0 %}
+                    <!-- Conditions Check -->
+                    {% set total_members = members|length %}
+                    {% set current_balance = wallet.balance if wallet else 0 %}
 
-        {% if total_members > 1 %}
-        <div class="alert alert-warning small mb-3">
-            <i class="bi bi-people-fill me-1"></i>
-            Remove all {{ total_members - 1 }} other member(s) first.
-        </div>
-        {% endif %}
+                    {% if total_members > 1 %}
+                    <div class="alert alert-warning small mb-3">
+                        <i class="bi bi-people-fill me-1"></i>
+                        Remove all {{ total_members - 1 }} other member(s) first.
+                    </div>
+                    {% endif %}
 
-        {% if current_balance > 0 %}
-        <div class="alert alert-warning small mb-3">
-            <i class="bi bi-wallet2 me-1"></i>
-            Clear group balance (₹{{ "{:,.0f}".format(current_balance) }}) first.
-        </div>
-        {% endif %}
+                    {% if current_balance > 0 %}
+                    <div class="alert alert-warning small mb-3">
+                        <i class="bi bi-wallet2 me-1"></i>
+                        Clear group balance (₹{{ "{:,.0f}".format(current_balance) }}) first.
+                    </div>
+                    {% endif %}
 
-        <!-- Delete Button -->
-        <form action="{{ url_for('groups.delete_group_route', group_id=group.id) }}" method="POST">
-            <button type="submit"
-                    class="btn btn-danger w-100"
-                    {% if total_members > 1 or current_balance > 0 %}disabled{% endif %}
-                    onclick="return confirm('Delete {{ group.name }} permanently? This cannot be undone.')">
-                <i class="bi bi-trash me-1"></i> Delete Group
-            </button>
-        </form>
-    </div>
-</div>
-{% endif %}
+                    <!-- Delete Button -->
+                    <form action="{{ url_for('groups.delete_group_route', group_id=group.id) }}" method="POST">
+                        <button type="submit"
+                                class="btn btn-danger w-100"
+                                {% if total_members > 1 or current_balance > 0 %}disabled{% endif %}
+                                onclick="return confirm('Delete {{ group.name }} permanently? This cannot be undone.')">
+                            <i class="bi bi-trash me-1"></i> Delete Group
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>

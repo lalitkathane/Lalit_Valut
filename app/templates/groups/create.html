@@ -8,41 +8,126 @@
         <div class="col-lg-8 col-md-10">
             <div class="card shadow-sm border-0 rounded-3">
                 <div class="card-body p-5">
-                    <h2 class="text-center mb-5 fw-bold fs-3 text-primary">
-                        <i class="bi bi-people-fill display-6 d-block mb-2"></i>Create New Group
-                    </h2>
+                    <form method="POST" action="{{ url_for('groups.create_group') }}">
+                        {% include 'groups/_form.html' %}
 
-                    {% set form_action = url_for('groups.create_group') %}
-                    {% set group = None %}
-                    {% include 'groups/_form.html' %}
-
-                    <!-- Buttons -->
-                    <div class="d-grid gap-3 d-md-flex justify-content-md-end mt-4 pt-4 border-top">
-                        <a href="{{ url_for('groups.list_groups') }}" class="btn btn-outline-secondary px-4 rounded-3 transition-hover">Cancel</a>
-                        <button type="submit" form="groupForm" class="btn btn-primary px-5 rounded-3 transition-hover">
-                            <i class="bi bi-plus-circle me-1"></i>Create Group
-                        </button>
-                    </div>
-
-                    <p class="text-center text-muted small mt-4">
-                        <i class="bi bi-shield-check me-1 text-success"></i>
-                        You will automatically become the group admin.
-                    </p>
+                        <!-- Buttons -->
+                        <div class="d-grid gap-3 d-md-flex justify-content-md-end mt-4 pt-4 border-top">
+                            <a href="{{ url_for('groups.list_groups') }}" class="btn btn-outline-secondary px-4 rounded-3 transition-hover">
+                                Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary px-5 rounded-3 transition-hover">
+                                <i class="bi bi-plus-circle me-1"></i> Create Group
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
+
+            <!-- Info Note -->
+            <p class="text-center text-muted small mt-4">
+                <i class="bi bi-shield-check me-1 text-success"></i>
+                You will automatically become the group admin.
+            </p>
         </div>
     </div>
 </div>
 
-<!-- Copy ALL styles and scripts from your original create.html here -->
+<!-- Custom Styles -->
 <style>
-/* Paste all CSS from original create.html */
+/* Smooth rotation for toggle icon */
+.toggle-icon {
+    transition: transform 0.3s;
+}
+[aria-expanded="true"] .toggle-icon {
+    transform: rotate(180deg);
+}
+/* Rounded corners for inputs and buttons */
+.form-control, .form-select, .btn {
+    border-radius: 8px;
+}
+/* Hover effects for buttons */
+.transition-hover:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+    transition: all 0.2s ease-in-out;
+}
+/* Card styling */
+.card {
+    border-radius: 12px;
+}
+/* Focus states for inputs */
+.form-control:focus, .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+/* Enhance spacing and layout responsiveness */
+@media(max-width: 768px) {
+    .container {
+        padding: 1.5rem;
+    }
+}
 </style>
 
-{% block scripts %}
-<!-- Paste all JavaScript from original create.html -->
-<script>
-// Paste counter and calculator logic here
-</script>
 {% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const nameInput = document.getElementById('nameInput');
+    const descInput = document.getElementById('descInput');
+    const nameCount = document.getElementById('nameCount');
+    const descCount = document.getElementById('descCount');
+
+    // Counters
+    if (nameInput && nameCount) {
+        nameInput.addEventListener('input', () => nameCount.textContent = `${nameInput.value.length}/40`);
+        nameCount.textContent = `${nameInput.value.length}/40`;
+    }
+
+    if (descInput && descCount) {
+        descInput.addEventListener('input', () => descCount.textContent = `${descInput.value.length}/250`);
+        descCount.textContent = `${descInput.value.length}/250`;
+    }
+
+    // Calculator logic
+    const getVal = (name) => document.querySelector(`[name="${name}"]`);
+    const previewText = document.getElementById('previewText');
+
+    if (previewText) {
+        function updatePreview() {
+            const principal = 10000;
+            const rate = parseFloat(getVal('interest_rate').value) || 0;
+            const months = parseInt(getVal('loan_duration').value) || 1;
+            const isBullet = getVal('repayment_type').value === 'bullet';
+            const isFlat = getVal('use_flat_rate').checked;
+
+            let total, emi;
+
+            if (isBullet) {
+                total = principal + (principal * (rate / 100) * (months / 12));
+                previewText.textContent = `₹${principal.toLocaleString()} loan → ₹${Math.round(total).toLocaleString()} repaid at end`;
+            } else if (isFlat) {
+                total = principal + (principal * (rate / 100) * (months / 12));
+                emi = total / months;
+                previewText.textContent = `₹${principal.toLocaleString()} loan → ₹${Math.round(emi).toLocaleString()}/mo (Total: ₹${Math.round(total).toLocaleString()})`;
+            } else {
+                const monthlyRate = rate / 100 / 12;
+                emi = monthlyRate === 0 ? principal / months : (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
+                total = emi * months;
+                previewText.textContent = `₹${principal.toLocaleString()} loan → ₹${Math.round(emi).toLocaleString()}/mo (Total: ₹${Math.round(total).toLocaleString()})`;
+            }
+        }
+
+        ['interest_rate', 'loan_duration', 'repayment_type', 'use_flat_rate'].forEach(name => {
+            const elem = getVal(name);
+            if (elem) {
+                elem.addEventListener('input', updatePreview);
+            }
+        });
+
+        updatePreview();
+    }
+});
+</script>
 {% endblock %}

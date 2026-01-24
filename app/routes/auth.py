@@ -26,11 +26,12 @@ def register():
     if request.method == 'POST':
         name = request.form.get('name')
         email = request.form.get('email')
+        phone = request.form.get('phone') # Added phone field
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
 
         # Validation
-        if not name or not email or not password:
+        if not name or not email or not phone or not password:
             flash('All fields are required!', 'danger')
             return redirect(url_for('auth.register'))
 
@@ -42,12 +43,13 @@ def register():
             flash('Password must be at least 6 characters!', 'danger')
             return redirect(url_for('auth.register'))
 
-        existing_user = User.query.filter_by(email=email).first()
+        # Check for existing email or phone
+        existing_user = User.query.filter((User.email == email) | (User.phone == phone)).first()
         if existing_user:
-            flash('Email already registered!', 'danger')
+            flash('Email or Phone number already registered!', 'danger')
             return redirect(url_for('auth.register'))
 
-        new_user = User(name=name, email=email)
+        new_user = User(name=name, email=email, phone=phone) # Added phone to model init
         new_user.set_password(password)
 
         db.session.add(new_user)
@@ -65,11 +67,13 @@ def login():
         return redirect(url_for('auth.dashboard'))
 
     if request.method == 'POST':
-        email = request.form.get('email')
+        # "login_identity" handles both Email or Phone
+        identity = request.form.get('identity')
         password = request.form.get('password')
         remember = request.form.get('remember', False)
 
-        user = User.query.filter_by(email=email).first()
+        # Search for user by email OR phone
+        user = User.query.filter((User.email == identity) | (User.phone == identity)).first()
 
         if user and user.check_password(password):
             login_user(user, remember=remember)
@@ -78,7 +82,7 @@ def login():
             next_page = request.args.get('next')
             return redirect(next_page or url_for('auth.dashboard'))
         else:
-            flash('Invalid email or password!', 'danger')
+            flash('Invalid identity or password!', 'danger')
 
     return render_template('login.html')
 
