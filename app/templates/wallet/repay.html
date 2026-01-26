@@ -4,37 +4,52 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6">
+    <div class="col-md-8">
         <div class="card">
-            <div class="card-header bg-warning text-dark">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
                     <i class="bi bi-cash"></i> Repay Your Loan
                 </h5>
+                <span class="badge bg-dark">Loan #{{ loan.id }}</span>
             </div>
             <div class="card-body p-4">
 
                 <!-- Loan Summary -->
                 <div class="alert alert-light border mb-4">
-                    <h6 class="alert-heading">Loan Details</h6>
-                    <hr>
                     <div class="row">
-                        <div class="col-6">
-                            <p class="mb-1"><strong>Loan Amount:</strong></p>
-                            <p class="fs-5">₹{{ "%.2f"|format(loan.approved_amount) }}</p>
+                        <div class="col-md-6 mb-3">
+                            <div class="p-3 bg-white rounded border">
+                                <p class="mb-1 text-muted"><strong>Borrower:</strong></p>
+                                <p class="fs-5">{{ loan.requester.name }}</p>
+                            </div>
                         </div>
-                        <div class="col-6">
-                            <p class="mb-1"><strong>Total Repaid:</strong></p>
-                            <p class="fs-5 text-success">₹{{ "%.2f"|format(loan.total_repaid) }}</p>
+                        <div class="col-md-6 mb-3">
+                            <div class="p-3 bg-white rounded border">
+                                <p class="mb-1 text-muted"><strong>Loan Amount:</strong></p>
+                                <p class="fs-5">₹{{ "%.2f"|format(loan.approved_amount or loan.amount) }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="p-3 bg-white rounded border">
+                                <p class="mb-1 text-muted"><strong>Total Repaid:</strong></p>
+                                <p class="fs-5 text-success">₹{{ "%.2f"|format(loan.total_repaid) }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="p-3 bg-white rounded border">
+                                <p class="mb-1 text-muted"><strong>Total Interest:</strong></p>
+                                <p class="fs-5 text-warning">₹{{ "%.2f"|format(loan.total_interest or 0) }}</p>
+                            </div>
                         </div>
                     </div>
-                    <hr>
-                    <div class="text-center">
-                        <p class="mb-1"><strong>Remaining Amount:</strong></p>
-                        <p class="fs-3 text-danger mb-0">₹{{ "%.2f"|format(remaining_amount) }}</p>
+
+                    <div class="text-center mt-3 p-3 bg-light rounded">
+                        <p class="mb-1 text-muted"><strong>Remaining Amount to Repay:</strong></p>
+                        <p class="fs-1 text-danger mb-0">₹{{ "%.2f"|format(remaining_amount) }}</p>
                     </div>
 
                     <!-- Progress Bar -->
-                    {% set progress = (loan.total_repaid / loan.approved_amount * 100) if loan.approved_amount else 0 %}
+                    {% set progress = (loan.total_repaid / (loan.total_repayable or loan.approved_amount or loan.amount) * 100) if (loan.total_repayable or loan.approved_amount or loan.amount) else 0 %}
                     <div class="progress mt-3" style="height: 25px;">
                         <div class="progress-bar bg-success" style="width: {{ progress }}%">
                             {{ "%.0f"|format(progress) }}% Repaid
@@ -42,32 +57,55 @@
                     </div>
                 </div>
 
-                <form method="POST" action="{{ url_for('wallet.repay', loan_id=loan.id) }}">
+                <!-- Note about repayment approval -->
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Note:</strong> Repayments require admin approval. After submission,
+                    an admin will verify and approve the payment before it's added to the wallet.
+                </div>
+
+                <form method="POST" action="{{ url_for('loans.submit_repayment', loan_id=loan.id) }}">
                     <div class="mb-3">
                         <label class="form-label">Repayment Amount (₹) *</label>
                         <div class="input-group input-group-lg">
                             <span class="input-group-text">₹</span>
                             <input type="number" name="amount" class="form-control"
                                    placeholder="Enter amount" min="1"
-                                   max="{{ remaining_amount }}" step="0.01" required>
+                                   max="{{ remaining_amount }}" step="0.01" required
+                                   value="{{ remaining_amount }}">
                         </div>
-                        <small class="text-muted">
+                        <div class="form-text">
                             Maximum: ₹{{ "%.2f"|format(remaining_amount) }}
-                        </small>
+                        </div>
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label">Description (Optional)</label>
-                        <input type="text" name="description" class="form-control"
-                               placeholder="e.g., Monthly installment">
+                        <label class="form-label">Payment Method / Description (Optional)</label>
+                        <textarea name="description" class="form-control" rows="2"
+                               placeholder="e.g., UPI payment from PhonePe, Bank transfer, etc."></textarea>
                     </div>
+
+                    <!-- EMI Selection (if applicable) -->
+                    {% if loan.emi_schedule and loan.emi_schedule.filter_by(is_paid=False).first() %}
+                    <div class="mb-4">
+                        <label class="form-label">Select EMI Installment (Optional)</label>
+                        <select name="emi_schedule_id" class="form-select">
+                            <option value="">Not for specific EMI</option>
+                            {% for emi in loan.emi_schedule.filter_by(is_paid=False).all() %}
+                            <option value="{{ emi.id }}">
+                                EMI #{{ emi.installment_number }} - Due: {{ emi.due_date.strftime('%d %b %Y') }} - ₹{{ "%.2f"|format(emi.emi_amount) }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
 
                     <!-- Quick Amount Buttons -->
                     <div class="mb-4">
                         <label class="form-label">Quick Select:</label>
                         <div class="d-flex gap-2 flex-wrap">
-                            {% set half = remaining_amount / 2 %}
                             {% set quarter = remaining_amount / 4 %}
+                            {% set half = remaining_amount / 2 %}
                             <button type="button" class="btn btn-outline-warning quick-amount"
                                     data-amount="{{ "%.2f"|format(quarter) }}">
                                 25% (₹{{ "%.0f"|format(quarter) }})
@@ -85,7 +123,7 @@
 
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-warning btn-lg">
-                            <i class="bi bi-check-lg"></i> Make Payment
+                            <i class="bi bi-check-lg"></i> Submit for Approval
                         </button>
                         <a href="{{ url_for('loans.view_loan', loan_id=loan.id) }}"
                            class="btn btn-outline-secondary btn-lg">

@@ -3,90 +3,330 @@
 {% block title %}{{ member.name }} - {{ group.name }}{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-4 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <i class="bi bi-person-circle text-primary" style="font-size: 5rem;"></i>
-                <h4 class="mt-3">{{ member.name }}</h4>
-                <p class="text-muted">{{ member.email }}</p>
-                <p class="text-muted">{{member.phone}}</p>
+<div class="container py-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('groups.list_groups') }}">My Groups</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('groups.view_group', group_id=group.id) }}">{{ group.name }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ member.name }}</li>
+        </ol>
+    </nav>
 
-                {% if membership.role == 'admin' %}
-                <span class="badge bg-warning text-dark fs-6">Admin</span>
-                {% else %}
-                <span class="badge bg-secondary fs-6">Member</span>
-                {% endif %}
-
-                <hr>
-                <p class="text-muted small mb-1">Member Since</p>
-                <p>{{ membership.joined_at.strftime('%d %b %Y') }}</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-8">
-        {% if ledger %}
-        <div class="card mb-4">
-            <div class="card-header bg-success text-white">
-                <i class="bi bi-wallet"></i> Financial Summary
-            </div>
-            <div class="card-body">
-                <div class="row text-center">
-                    <div class="col-md-4">
-                        <h5 class="text-muted">Contributed</h5>
-                        <h3 class="text-primary">₹{{ "%.2f"|format(ledger.principal_contributed) }}</h3>
-                    </div>
-                    <div class="col-md-4">
-                        <h5 class="text-muted">Interest Earned</h5>
-                        <h3 class="text-success">₹{{ "%.2f"|format(ledger.interest_earned) }}</h3>
-                    </div>
-                    <div class="col-md-4">
-                        <h5 class="text-muted">Total Balance</h5>
-                        <h3 class="text-info">₹{{ "%.2f"|format(ledger.total_balance) }}</h3>
-                    </div>
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
-            </div>
-        </div>
+            {% endfor %}
         {% endif %}
+    {% endwith %}
 
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <i class="bi bi-cash-stack"></i> Loan History
-            </div>
-            <div class="card-body">
-                {% if loans %}
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Amount</th>
-                                <th>Status</th>
-                                <th>Date</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for loan in loans %}
-                            <tr>
-                                <td>₹{{ "%.0f"|format(loan.amount) }}</td>
-                                <td><span class="badge bg-secondary">{{ loan.status }}</span></td>
-                                <td>{{ loan.created_at.strftime('%d %b %Y') }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+    <div class="row">
+        <!-- Profile Sidebar -->
+        <div class="col-md-4 mb-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center p-4">
+                    <!-- Avatar -->
+                    <div class="mb-4">
+                        <div class="rounded-circle bg-primary bg-opacity-10 d-inline-flex align-items-center justify-content-center" 
+                             style="width: 100px; height: 100px;">
+                            <i class="bi bi-person-circle text-primary" style="font-size: 3rem;"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Member Info -->
+                    <h4 class="fw-bold mb-1">{{ member.name }}</h4>
+                    <p class="text-muted mb-3">{{ member.email }}</p>
+                    
+                    {% if member.phone %}
+                    <p class="text-muted mb-3">
+                        <i class="bi bi-telephone me-2"></i>{{ member.phone }}
+                    </p>
+                    {% endif %}
+
+                    <!-- Role Badge -->
+                    {% if membership.role == 'admin' %}
+                    <span class="badge bg-warning text-dark fs-6 px-3 py-2 mb-3">
+                        <i class="bi bi-shield-check me-1"></i> Group Admin
+                    </span>
+                    {% else %}
+                    <span class="badge bg-secondary fs-6 px-3 py-2 mb-3">
+                        <i class="bi bi-person me-1"></i> Member
+                    </span>
+                    {% endif %}
+
+                    <!-- Member Since -->
+                    <hr class="my-4">
+                    <p class="text-muted small mb-1">Member Since</p>
+                    <p class="fw-semibold">{{ membership.joined_at.strftime('%d %b %Y') }}</p>
+                    
+                    <!-- Membership Status -->
+                    <div class="mt-3">
+                        <span class="badge {% if membership.is_active %}bg-success{% else %}bg-danger{% endif %}">
+                            {% if membership.is_active %}Active{% else %}Inactive{% endif %} Member
+                        </span>
+                    </div>
                 </div>
-                {% else %}
-                <p class="text-muted text-center py-3 mb-0">No loans yet.</p>
-                {% endif %}
             </div>
+            
+            <!-- Quick Actions (Admin only) -->
+            {% if is_admin and member.id != current_user.id %}
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header bg-primary bg-opacity-10">
+                    <h6 class="mb-0 fw-bold">
+                        <i class="bi bi-gear me-2"></i> Admin Actions
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        {% if membership.role == 'admin' and group.get_admins()|length > 1 %}
+                        <form method="POST" 
+                              action="{{ url_for('groups.remove_member_route', group_id=group.id, user_id=member.id) }}"
+                              onsubmit="return confirm('Remove {{ member.name }} as admin? They will become a regular member.');">
+                            <button type="submit" class="btn btn-outline-warning w-100">
+                                <i class="bi bi-person-dash me-1"></i> Remove as Admin
+                            </button>
+                        </form>
+                        {% elif membership.role == 'member' %}
+                        <button class="btn btn-outline-success w-100" 
+                                onclick="alert('Feature coming soon: Make {{ member.name }} an admin')">
+                            <i class="bi bi-person-plus me-1"></i> Make Admin
+                        </button>
+                        {% endif %}
+                        
+                        <form method="POST" 
+                              action="{{ url_for('groups.remove_member_route', group_id=group.id, user_id=member.id) }}"
+                              onsubmit="return confirm('Remove {{ member.name }} from {{ group.name }}? This action cannot be undone.');">
+                            <button type="submit" class="btn btn-outline-danger w-100">
+                                <i class="bi bi-person-x me-1"></i> Remove from Group
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
+
+        <!-- Financial Information -->
+        <div class="col-md-8">
+            {% if financial_summary and financial_summary.has_ledger %}
+            <!-- Financial Summary -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-wallet2 me-2"></i> Financial Summary
+                        </h5>
+                        {% if ledger %}
+                        <span class="badge bg-light text-dark">
+                            Updated: {{ ledger.updated_at.strftime('%d %b %Y') }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center g-3">
+                        <!-- Contributions -->
+                        <div class="col-md-4">
+                            <div class="p-3 bg-primary bg-opacity-10 rounded-3">
+                                <div class="text-muted small mb-1">Principal Contributed</div>
+                                <h3 class="text-primary fw-bold">₹{{ "%.2f"|format(financial_summary.ledger_summary.principal_contributed) }}</h3>
+                            </div>
+                        </div>
+                        
+                        <!-- Interest Earned -->
+                        <div class="col-md-4">
+                            <div class="p-3 bg-success bg-opacity-10 rounded-3">
+                                <div class="text-muted small mb-1">Interest Earned</div>
+                                <h3 class="text-success fw-bold">₹{{ "%.2f"|format(financial_summary.ledger_summary.interest_earned) }}</h3>
+                            </div>
+                        </div>
+                        
+                        <!-- Total Balance -->
+                        <div class="col-md-4">
+                            <div class="p-3 bg-info bg-opacity-10 rounded-3">
+                                <div class="text-muted small mb-1">Current Balance</div>
+                                <h3 class="text-info fw-bold">₹{{ "%.2f"|format(financial_summary.ledger_summary.total_balance) }}</h3>
+                            </div>
+                        </div>
+                        
+                        <!-- Net Principal -->
+                        <div class="col-md-6 mt-3">
+                            <div class="p-3 bg-light rounded-3">
+                                <div class="text-muted small mb-1">Net Principal</div>
+                                <h4 class="fw-bold">₹{{ "%.2f"|format(financial_summary.ledger_summary.net_principal) }}</h4>
+                            </div>
+                        </div>
+                        
+                        <!-- Net Interest -->
+                        <div class="col-md-6 mt-3">
+                            <div class="p-3 bg-light rounded-3">
+                                <div class="text-muted small mb-1">Net Interest</div>
+                                <h4 class="fw-bold">₹{{ "%.2f"|format(financial_summary.ledger_summary.net_interest) }}</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Loan History -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-cash-stack me-2"></i> Loan History
+                        </h5>
+                        <span class="badge bg-light text-dark">{{ loans|length }} loan{{ 's' if loans|length != 1 else '' }}</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if loans %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Loan #</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th>Requested</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for loan in loans %}
+                                <tr>
+                                    <td>
+                                        <strong>#{{ loan.id }}</strong>
+                                        <div class="small text-muted">{{ loan.reason|truncate(30) }}</div>
+                                    </td>
+                                    <td class="fw-bold">₹{{ "%.0f"|format(loan.amount) }}</td>
+                                    <td>
+                                        {% if loan.status == 'pending' %}
+                                        <span class="badge bg-warning">Pending</span>
+                                        {% elif loan.status == 'approved' %}
+                                        <span class="badge bg-info">Approved</span>
+                                        {% elif loan.status == 'disbursed' %}
+                                        <span class="badge bg-primary">Disbursed</span>
+                                        {% elif loan.status == 'completed' %}
+                                        <span class="badge bg-success">Completed</span>
+                                        {% elif loan.status == 'rejected' %}
+                                        <span class="badge bg-danger">Rejected</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ loan.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ loan.created_at.strftime('%d %b %Y') }}</td>
+                                    <td>
+                                        <a href="{{ url_for('loans.view_loan', loan_id=loan.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-cash text-muted" style="font-size: 3rem;"></i>
+                        <h6 class="text-muted fw-semibold mt-3">No Loan History</h6>
+                        <p class="text-muted small mb-0">{{ member.name }} has not requested any loans yet</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Withdrawal History -->
+            {% if withdrawals %}
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0 text-white">
+                        <i class="bi bi-arrow-down-circle me-2"></i> Withdrawal History
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th>Membership Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for withdrawal in withdrawals %}
+                                <tr>
+                                    <td>{{ withdrawal.created_at.strftime('%d %b %Y') }}</td>
+                                    <td>
+                                        {% if withdrawal.withdrawal_type == 'principal_only' %}
+                                        <span class="badge bg-info">Principal Only</span>
+                                        {% else %}
+                                        <span class="badge bg-warning">With Interest</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="fw-bold">₹{{ "%.2f"|format(withdrawal.total_amount) }}</td>
+                                    <td>
+                                        {% if withdrawal.status == 'pending' %}
+                                        <span class="badge bg-warning">Pending</span>
+                                        {% elif withdrawal.status == 'approved' %}
+                                        <span class="badge bg-info">Approved</span>
+                                        {% elif withdrawal.status == 'processed' %}
+                                        <span class="badge bg-success">Processed</span>
+                                        {% elif withdrawal.status == 'rejected' %}
+                                        <span class="badge bg-danger">Rejected</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if withdrawal.membership_action == 'deactivate' %}
+                                        <span class="badge bg-danger">Left Group</span>
+                                        {% else %}
+                                        <span class="badge bg-success">Remained</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Back Button -->
+    <div class="mt-4">
+        <a href="{{ url_for('groups.view_group', group_id=group.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Back to Group
+        </a>
     </div>
 </div>
 
-<div class="mt-4">
-    <a href="{{ url_for('groups.view_group', group_id=group.id) }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Back to Group
-    </a>
-</div>
+<style>
+    .card {
+        border-radius: 0.75rem;
+    }
+    
+    .rounded-3 {
+        border-radius: 0.5rem !important;
+    }
+    
+    .bg-opacity-10 {
+        --bs-bg-opacity: 0.1;
+    }
+    
+    .table th {
+        font-weight: 600;
+        color: #495057;
+    }
+</style>
 {% endblock %}

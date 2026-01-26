@@ -3,48 +3,74 @@
 {% block title %}Add Member – {{ group.name }}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-6 col-md-8">
-        <div class="card shadow-sm border-0 rounded-4">
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 col-md-8">
+            <div class="card shadow-sm border-0 rounded-4">
 
-            <!-- Header -->
-            <div class="card-header bg-success text-white rounded-top-4">
-                <h5 class="mb-0 d-flex align-items-center">
-                    <i class="bi bi-person-plus me-2"></i>
-                    Add Member to "{{ group.name }}"
-                </h5>
-            </div>
+                <!-- Header -->
+                <div class="card-header bg-primary text-white rounded-top-4 py-3">
+                    <h5 class="mb-0 d-flex align-items-center">
+                        <i class="bi bi-person-plus me-2"></i>
+                        Add Member to "{{ group.name }}"
+                    </h5>
+                </div>
 
-            <!-- Body -->
-            <div class="card-body p-4">
-                <form method="POST" action="{{ url_for('groups.add_member_route', group_id=group.id) }}">
+                <!-- Body -->
+                <div class="card-body p-4">
+                    <!-- Flash Messages -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
 
-                    <!-- Email Input -->
-                    <div class="mb-4">
-                        <label for="memberEmail" class="form-label fw-semibold">
-                            Member’s Email Address
-                        </label>
-                        <input type="email" id="memberEmail" name="email"
-                               class="form-control form-control-lg"
-                               placeholder="Enter registered user’s email" required>
-                        <small class="text-muted">
-                            The user must already be registered on <strong>Bachat Gat</strong>.
-                        </small>
-                    </div>
+                    <form method="POST" action="{{ url_for('groups.add_member_route', group_id=group.id) }}">
 
-                    <!-- Action Buttons -->
-                    <div class="d-flex justify-content-end gap-2">
-                        <a href="{{ url_for('groups.view_group', group_id=group.id) }}"
-                           class="btn btn-outline-secondary px-4 rounded-pill">
-                            <i class="bi bi-x-circle me-1"></i> Cancel
-                        </a>
-                        <button type="submit" class="btn btn-success px-4 rounded-pill">
-                            <i class="bi bi-person-plus-fill me-1"></i> Add Member
-                        </button>
-                    </div>
-                </form>
+                        <!-- Email Input -->
+                        <div class="mb-4">
+                            <label for="memberEmail" class="form-label fw-semibold">
+                                Member's Email Address <span class="text-danger">*</span>
+                            </label>
+                            <input type="email" id="memberEmail" name="email"
+                                   class="form-control form-control-lg"
+                                   placeholder="Enter registered user's email" required
+                                   autocomplete="off">
+                            <div class="form-text text-muted mt-2">
+                                <i class="bi bi-info-circle me-1"></i>
+                                The user must already be registered on Bachat Gat.
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+                            <a href="{{ url_for('groups.view_group', group_id=group.id) }}"
+                               class="btn btn-outline-secondary px-4 rounded-3">
+                                <i class="bi bi-arrow-left me-1"></i> Back
+                            </a>
+                            <button type="submit" class="btn btn-primary px-4 rounded-3">
+                                <i class="bi bi-person-plus-fill me-1"></i> Add Member
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .rounded-4 {
+        border-radius: 1rem !important;
+    }
+    .form-control:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+</style>
 {% endblock %}

@@ -53,6 +53,40 @@
     </div>
 </div>
 
+<!-- Withdrawal-related Navigation -->
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <a href="{{ url_for('admin.pending_withdrawals', group_id=group.id) }}"
+           class="card h-100 text-decoration-none">
+            <div class="card-body text-center">
+                <i class="bi bi-cash-coin text-primary" style="font-size: 2rem;"></i>
+                <h5 class="mt-2">Pending Withdrawals</h5>
+                <p class="text-muted mb-0">Review member withdrawal requests</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4 mb-3">
+        <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}"
+           class="card h-100 text-decoration-none">
+            <div class="card-body text-center">
+                <i class="bi bi-wallet2 text-success" style="font-size: 2rem;"></i>
+                <h5 class="mt-2">Group Wallet</h5>
+                <p class="text-muted mb-0">Balance: ₹{{ "%.2f"|format(group.wallet.balance if group.wallet else 0) }}</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-4 mb-3">
+        <a href="{{ url_for('admin.transfer_history', group_id=group.id) }}"
+           class="card h-100 text-decoration-none">
+            <div class="card-body text-center">
+                <i class="bi bi-clock-history text-info" style="font-size: 2rem;"></i>
+                <h5 class="mt-2">Audit Trail</h5>
+                <p class="text-muted mb-0">View admin transfer history</p>
+            </div>
+        </a>
+    </div>
+</div>
+
 <!-- Pending Repayment Approvals -->
 {% if pending_repayments %}
 <div class="card mb-4 border-warning">
@@ -199,24 +233,47 @@
 </div>
 {% endif %}
 
+<!-- Admin List -->
+{% if admins %}
+<div class="card mb-4">
+    <div class="card-header bg-secondary text-white">
+        <i class="bi bi-shield-check"></i> Group Administrators ({{ admins|length }})
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% for admin in admins %}
+            <div class="col-md-4 mb-2">
+                <div class="d-flex align-items-center">
+                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center"
+                         style="width: 40px; height: 40px;">
+                        <i class="bi bi-person"></i>
+                    </div>
+                    <div class="ms-3">
+                        <strong>{{ admin.user.name }}</strong><br>
+                        <small class="text-muted">Admin since {{ admin.joined_at.strftime('%d %b %Y') }}</small>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Quick Links -->
 <div class="row">
-    <div class="col-md-4 mb-3">
-        <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}" class="btn btn-outline-primary w-100 py-3">
-            <i class="bi bi-wallet2 fs-4"></i><br>
-            Manage Wallet
-        </a>
-    </div>
-    <div class="col-md-4 mb-3">
-        <a href="{{ url_for('groups.group_settings', group_id=group.id) }}" class="btn btn-outline-secondary w-100 py-3">
+    <div class="col-md-6 mb-3">
+        <a href="{{ url_for('groups.group_settings', group_id=group.id) }}"
+           class="btn btn-outline-secondary w-100 py-3">
             <i class="bi bi-sliders fs-4"></i><br>
             Group Settings
         </a>
     </div>
-    <div class="col-md-4 mb-3">
-        <a href="{{ url_for('admin.transfer_history', group_id=group.id) }}" class="btn btn-outline-info w-100 py-3">
+    <div class="col-md-6 mb-3">
+        <a href="{{ url_for('admin.transfer_history', group_id=group.id) }}"
+           class="btn btn-outline-info w-100 py-3">
             <i class="bi bi-clock-history fs-4"></i><br>
-            Admin History
+            Audit History
         </a>
     </div>
 </div>

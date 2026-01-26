@@ -6,28 +6,46 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h2><i class="bi bi-people"></i> Member Ledgers</h2>
-        <p class="text-muted mb-0">{{ group.name }}</p>
+        <p class="text-muted mb-0">{{ group.name }} • {{ ledgers|length }} Members</p>
     </div>
-    <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}" class="btn btn-outline-primary">
-        <i class="bi bi-arrow-left"></i> Back to Wallet
-    </a>
+    <div>
+        <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}" class="btn btn-outline-primary">
+            <i class="bi bi-arrow-left"></i> Back to Wallet
+        </a>
+    </div>
 </div>
 
 <!-- Summary -->
 <div class="row mb-4">
-    <div class="col-md-6">
+    <div class="col-md-3">
         <div class="card bg-primary text-white">
-            <div class="card-body text-center">
-                <h4>Total Principal</h4>
-                <h2>₹{{ "%.2f"|format(total_principal) }}</h2>
+            <div class="card-body text-center py-3">
+                <h6 class="mb-1">Total Principal</h6>
+                <h4 class="mb-0">₹{{ "%.2f"|format(total_principal) }}</h4>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-3">
         <div class="card bg-success text-white">
-            <div class="card-body text-center">
-                <h4>Total Interest Earned</h4>
-                <h2>₹{{ "%.2f"|format(total_interest) }}</h2>
+            <div class="card-body text-center py-3">
+                <h6 class="mb-1">Total Interest</h6>
+                <h4 class="mb-0">₹{{ "%.2f"|format(total_interest) }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center py-3">
+                <h6 class="mb-1">Active Members</h6>
+                <h4 class="mb-0">{{ group.get_active_member_count() }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body text-center py-3">
+                <h6 class="mb-1">Total Balance</h6>
+                <h4 class="mb-0">₹{{ "%.2f"|format(wallet.balance) }}</h4>
             </div>
         </div>
     </div>
@@ -41,13 +59,19 @@
                 <thead>
                     <tr>
                         <th>Member</th>
-                        <th>Contributed</th>
+                        <th>Status</th>
+                        <th>Principal Contributed</th>
+                        <th>Principal Withdrawn</th>
+                        <th>Net Principal</th>
                         <th>Interest Earned</th>
+                        <th>Interest Withdrawn</th>
+                        <th>Net Interest</th>
                         <th>Total Balance</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for ledger in ledgers %}
+                    {% set is_active = group.members.filter_by(user_id=ledger.user_id, is_active=True).first() %}
                     <tr>
                         <td>
                             {{ ledger.member.name }}
@@ -55,12 +79,47 @@
                             <span class="badge bg-info">You</span>
                             {% endif %}
                         </td>
-                        <td>₹{{ "%.2f"|format(ledger.principal_contributed) }}</td>
+                        <td>
+                            {% if is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-primary">₹{{ "%.2f"|format(ledger.principal_contributed) }}</td>
+                        <td class="text-danger">₹{{ "%.2f"|format(ledger.principal_withdrawn) }}</td>
+                        <td>
+                            <strong class="{% if ledger.net_principal > 0 %}text-success{% else %}text-muted{% endif %}">
+                                ₹{{ "%.2f"|format(ledger.net_principal) }}
+                            </strong>
+                        </td>
                         <td class="text-success">₹{{ "%.2f"|format(ledger.interest_earned) }}</td>
-                        <td><strong>₹{{ "%.2f"|format(ledger.total_balance) }}</strong></td>
+                        <td class="text-danger">₹{{ "%.2f"|format(ledger.interest_withdrawn) }}</td>
+                        <td>
+                            <strong class="{% if ledger.net_interest > 0 %}text-warning{% else %}text-muted{% endif %}">
+                                ₹{{ "%.2f"|format(ledger.net_interest) }}
+                            </strong>
+                        </td>
+                        <td>
+                            <strong class="fs-6 {% if ledger.total_balance > 0 %}text-primary{% else %}text-muted{% endif %}">
+                                ₹{{ "%.2f"|format(ledger.total_balance) }}
+                            </strong>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
+                <tfoot>
+                    <tr class="table-light">
+                        <th colspan="2">Totals</th>
+                        <th>₹{{ "%.2f"|format(total_principal) }}</th>
+                        <th>₹{{ "%.2f"|format(sum(l.principal_withdrawn for l in ledgers)) }}</th>
+                        <th>₹{{ "%.2f"|format(sum(l.net_principal for l in ledgers)) }}</th>
+                        <th>₹{{ "%.2f"|format(total_interest) }}</th>
+                        <th>₹{{ "%.2f"|format(sum(l.interest_withdrawn for l in ledgers)) }}</th>
+                        <th>₹{{ "%.2f"|format(sum(l.net_interest for l in ledgers)) }}</th>
+                        <th>₹{{ "%.2f"|format(wallet.balance) }}</th>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </div>
@@ -68,7 +127,8 @@
 {% else %}
 <div class="text-center py-5">
     <i class="bi bi-people text-muted" style="font-size: 4rem;"></i>
-    <h4 class="mt-3 text-muted">No contributions yet</h4>
+    <h4 class="mt-3 text-muted">No member contributions yet</h4>
+    <p class="text-muted">Start by making contributions to the group wallet</p>
 </div>
 {% endif %}
 {% endblock %}

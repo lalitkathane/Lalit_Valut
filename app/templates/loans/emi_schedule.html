@@ -29,7 +29,7 @@
                 <div class="card text-center shadow-sm h-100">
                     <div class="card-body py-4">
                         <small class="text-muted">Total Repayable</small>
-                        <h4 class="text-primary mb-0 mt-2">₹{{ "%.2f"|format(loan.total_repayable or 0) }}</h4>
+                        <h4 class="text-primary mb-0 mt-2">₹{{ "{:,.0f}".format(loan.total_repayable or 0) }}</h4>
                     </div>
                 </div>
             </div>
@@ -37,7 +37,7 @@
                 <div class="card text-center shadow-sm h-100">
                     <div class="card-body py-4">
                         <small class="text-muted">Total Interest</small>
-                        <h4 class="text-warning mb-0 mt-2">₹{{ "%.2f"|format(loan.total_interest or 0) }}</h4>
+                        <h4 class="text-warning mb-0 mt-2">₹{{ "{:,.0f}".format(loan.total_interest or 0) }}</h4>
                     </div>
                 </div>
             </div>
@@ -45,7 +45,7 @@
                 <div class="card text-center shadow-sm h-100">
                     <div class="card-body py-4">
                         <small class="text-muted">Monthly EMI</small>
-                        <h4 class="text-success mb-0 mt-2">₹{{ "%.2f"|format(loan.emi_amount or 0) }}</h4>
+                        <h4 class="text-success mb-0 mt-2">₹{{ "{:,.0f}".format(loan.emi_amount or 0) }}</h4>
                     </div>
                 </div>
             </div>
@@ -87,11 +87,11 @@
                             <tr class="{% if emi.is_paid %}table-success{% else %}table-light{% endif %}">
                                 <td class="text-center fw-bold">{{ emi.installment_number }}</td>
                                 <td class="text-center">{{ emi.due_date.strftime('%d %b %Y') }}</td>
-                                <td class="text-center">₹{{ "%.2f"|format(emi.opening_balance) }}</td>
-                                <td class="text-center">₹{{ "%.2f"|format(emi.emi_amount) }}</td>
-                                <td class="text-center">₹{{ "%.2f"|format(emi.principal_component) }}</td>
-                                <td class="text-center">₹{{ "%.2f"|format(emi.interest_component) }}</td>
-                                <td class="text-center">₹{{ "%.2f"|format(emi.closing_balance) }}</td>
+                                <td class="text-center">₹{{ "{:,.0f}".format(emi.opening_balance) }}</td>
+                                <td class="text-center">₹{{ "{:,.0f}".format(emi.emi_amount) }}</td>
+                                <td class="text-center">₹{{ "{:,.0f}".format(emi.principal_component) }}</td>
+                                <td class="text-center">₹{{ "{:,.0f}".format(emi.interest_component) }}</td>
+                                <td class="text-center">₹{{ "{:,.0f}".format(emi.closing_balance) }}</td>
                                 <td class="text-center">
                                     {% if emi.is_paid %}
                                         <span class="badge bg-success px-4 py-2">Paid</span>
@@ -108,9 +108,9 @@
                         <tfoot class="table-dark">
                             <tr class="text-end fw-bold">
                                 <td colspan="3" class="text-start">TOTALS</td>
-                                <td class="text-center">₹{{ "%.2f"|format(total_emi_sum) }}</td>
-                                <td class="text-center text-primary">₹{{ "%.2f"|format(total_principal_sum) }}</td>
-                                <td class="text-center text-warning">₹{{ "%.2f"|format(total_interest_sum) }}</td>
+                                <td class="text-center">₹{{ "{:,.0f}".format(total_emi_sum) }}</td>
+                                <td class="text-center text-primary">₹{{ "{:,.0f}".format(total_principal_sum) }}</td>
+                                <td class="text-center text-warning">₹{{ "{:,.0f}".format(total_interest_sum) }}</td>
                                 <td colspan="2"></td>
                             </tr>
                         </tfoot>
@@ -126,6 +126,12 @@
             </div>
         </div>
 
+        <!-- Summary Stats -->
+        <div class="text-muted mb-3 mt-4 text-center">
+            <strong>{{ paid_installments }} of {{ total_installments }}</strong> installments paid
+            • Total paid: <strong>₹{{ "{:,.0f}".format(total_paid_amount) }}</strong>
+        </div>
+
         <!-- Back Button -->
         <div class="mt-5 text-center">
             <a href="{{ url_for('loans.view_loan', loan_id=loan.id) }}"
@@ -135,11 +141,4 @@
         </div>
     </div>
 </div>
-
-<!--<div class="text-muted mb-3">
-    <strong>{{ paid_installments }} of {{ total_installments }}</strong> installments paid
-    • Total paid: <strong>₹{{ "%.2f"|format(total_paid_amount) }}</strong>
-</div>-->
-
-
 {% endblock %}

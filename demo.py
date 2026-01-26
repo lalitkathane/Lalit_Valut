@@ -9,7 +9,7 @@ skip_dirs = {'venv', '__pycache__', 'migrations', '.git', 'node_modules'}
 batches = {
     'batch1_core.txt': ['models.py', 'extensions.py', 'config.py', 'run.py', '__init__.py'],
     'batch2_routes.txt': ['admin.py', 'auth.py', 'groups.py', 'loans.py', 'wallets.py'],
-    'batch3_services.txt': ['admin_service.py','interest_service.py', 'authorization_service.py', 'loan_service.py',
+    'batch3_services.txt': ['member_service.py','interest_service.py', 'authorization_service.py', 'loan_service.py',
                             'membership_service.py', 'wallet_service.py' ],
     'batch4_templates.txt': ['.html'],
 }

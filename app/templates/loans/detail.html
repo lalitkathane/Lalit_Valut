@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block title %}
-Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
+Loan #{{ loan.id }} - ₹{{ "{:,.0f}".format(loan.amount) }}
 {% endblock %}
 
 {% block content %}
@@ -26,19 +26,21 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
 
 <!-- Action Alerts Section -->
 {% if loan.status == 'disbursed' and details.next_emi and current_user.id == loan.requested_by %}
-    {% set days_left = (details.next_emi.due_date - today).days %}  <!-- FIXED: Removed .date() -->
+    {% set days_left = (details.next_emi.due_date - today).days %}
+    {% if days_left >= 0 %}
     <div class="alert alert-warning border-0 shadow-sm mb-4 d-flex align-items-center" role="alert">
         <div class="flex-shrink-0">
             <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
         </div>
         <div class="flex-grow-1">
             <h6 class="alert-heading mb-1">EMI #{{ details.next_emi.installment }} Due in {{ days_left }} days</h6>
-            <p class="mb-0 small">Amount: ₹{{ "%.2f"|format(details.next_emi.emi_amount) }} • Due Date: {{ details.next_emi.due_date.strftime('%B %d, %Y') }}</p>
+            <p class="mb-0 small">Amount: ₹{{ "{:,.0f}".format(details.next_emi.emi_amount) }} • Due Date: {{ details.next_emi.due_date.strftime('%B %d, %Y') }}</p>
         </div>
         <a href="{{ url_for('loans.repay_loan', loan_id=loan.id) }}" class="btn btn-warning text-white ms-3">
             <i class="bi bi-credit-card me-1"></i> Pay Now
         </a>
     </div>
+    {% endif %}
 {% endif %}
 
 {% if request.args.get('edited') == 'true' %}
@@ -81,7 +83,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                         <div class="d-flex flex-column justify-content-center h-100">
                             <p class="mb-1 small">
                                 <span class="text-muted">Loan Request:</span>
-                                <strong class="ms-1 text-dark">₹{{ "%.2f"|format(loan.amount) }}</strong>
+                                <strong class="ms-1 text-dark">₹{{ "{:,.0f}".format(loan.amount) }}</strong>
                                 <span class="text-muted">by</span> {{ loan.requester.name }}
                             </p>
                             <p class="mb-0 small text-truncate">
@@ -130,7 +132,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
         <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
             <div class="card-body text-center p-3">
                 <small class="text-muted d-block text-uppercase fw-bold x-small mb-1">Loan Amount</small>
-                <h4 class="fw-bold mb-0">₹{{ "%.0f"|format(loan.amount) }}</h4>
+                <h4 class="fw-bold mb-0">₹{{ "{:,.0f}".format(loan.amount) }}</h4>
             </div>
         </div>
     </div>
@@ -148,7 +150,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
         <div class="card border-0 shadow-sm h-100 border-start border-success border-4">
             <div class="card-body text-center p-3">
                 <small class="text-muted d-block text-uppercase fw-bold x-small mb-1">Repaid</small>
-                <h4 class="fw-bold mb-0 text-success">₹{{ "%.0f"|format(loan.total_repaid) }}</h4>
+                <h4 class="fw-bold mb-0 text-success">₹{{ "{:,.0f}".format(loan.total_repaid) }}</h4>
             </div>
         </div>
     </div>
@@ -156,7 +158,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
         <div class="card border-0 shadow-sm h-100 border-start border-danger border-4">
             <div class="card-body text-center p-3">
                 <small class="text-muted d-block text-uppercase fw-bold x-small mb-1">Remaining</small>
-                <h4 class="fw-bold mb-0 text-danger">₹{{ "%.0f"|format(loan.get_remaining_amount()) }}</h4>
+                <h4 class="fw-bold mb-0 text-danger">₹{{ "{:,.0f}".format(loan.get_remaining_amount()) }}</h4>
             </div>
         </div>
     </div>
@@ -166,62 +168,61 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
 <div class="row g-4">
     <!-- LEFT COLUMN -->
     <div class="col-lg-8">
-        <!-- In detail (1).html, update the Loan Overview Card section: -->
-
-<!-- Loan Overview Card -->
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-body p-4">
-        {% if loan.borrower_notes %}
-        <div class="p-3 bg-info-subtle rounded-3 mb-4">
-            <small class="text-info text-uppercase fw-bold d-block mb-2">Borrower Notes</small>
-            <p class="mb-0 small">{{ loan.borrower_notes|replace('\n', '<br>'|safe) }}</p>
-        </div>
-        {% endif %}
-
-        {% if is_admin and loan.admin_remarks %}
-        <div class="p-3 bg-warning-subtle rounded-3 mb-4">
-            <small class="text-warning text-uppercase fw-bold d-block mb-2">Admin Remarks</small>
-            <p class="mb-0 small">{{ loan.admin_remarks|replace('\n', '<br>'|safe) }}</p>
-        </div>
-        {% endif %}
-
-        {% if loan.status == 'pending' %}
-            <h6 class="fw-bold mb-3 small">VOTING PROGRESS</h6>
-            {% set vote_progress = (details.voting.votes_cast / details.voting.eligible_voters * 100) if details.voting.eligible_voters > 0 else 0 %}
-            <div class="progress rounded-pill mb-2" style="height: 12px;">
-                <div class="progress-bar bg-primary" style="width: {{ vote_progress }}%"></div>
-            </div>
-            <div class="d-flex justify-content-between x-small text-muted">
-                <span>{{ details.voting.votes_cast }} / {{ details.voting.eligible_voters }} members voted</span>
-                <div class="d-flex gap-2">
-                    <span class="fw-bold text-success">{{ details.voting.approvals }} Approvals</span>
-                    <span class="fw-bold text-danger">{{ details.voting.rejections }} Rejections</span>
+        <!-- Loan Overview Card -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                {% if loan.borrower_notes %}
+                <div class="p-3 bg-info-subtle rounded-3 mb-4">
+                    <small class="text-info text-uppercase fw-bold d-block mb-2">Borrower Notes</small>
+                    <p class="mb-0 small">{{ loan.borrower_notes|replace('\n', '<br>'|safe) }}</p>
                 </div>
-            </div>
-            <div class="mt-2 text-muted x-small">
-                <i class="bi bi-info-circle me-1"></i> Requires {{ details.voting.required_approvals }} approvals
-            </div>
+                {% endif %}
 
-        {% elif loan.status in ['disbursed', 'completed'] %}
-            <h6 class="fw-bold mb-3 small">REPAYMENT PROGRESS</h6>
-            {% set repay_progress = (loan.total_repaid / loan.total_repayable * 100) if loan.total_repayable else 0 %}
-            <div class="progress rounded-pill mb-2" style="height: 12px;">
-                <div class="progress-bar bg-success" style="width: {{ repay_progress }}%"></div>
-            </div>
-            <div class="d-flex justify-content-between x-small text-muted">
-                <span>{{ "%.1f"|format(repay_progress) }}% Collected</span>
-                <span class="fw-bold">Total: ₹{{ "%.0f"|format(loan.total_repayable or 0) }}</span>
-            </div>
-            {% elif loan.status == 'disbursed' and loan.is_fully_repaid() %}
-            <div class="mt-4 pt-3 border-top">
-                <div class="alert alert-success mb-0 py-2">
-                    <i class="bi bi-check-circle-fill me-2"></i>
-                    Loan fully repaid! Awaiting admin closure.
+                {% if is_admin and loan.admin_remarks %}
+                <div class="p-3 bg-warning-subtle rounded-3 mb-4">
+                    <small class="text-warning text-uppercase fw-bold d-block mb-2">Admin Remarks</small>
+                    <p class="mb-0 small">{{ loan.admin_remarks|replace('\n', '<br>'|safe) }}</p>
                 </div>
+                {% endif %}
+
+                {% if loan.status == 'pending' %}
+                    <h6 class="fw-bold mb-3 small">VOTING PROGRESS</h6>
+                    {% set vote_progress = (details.voting.votes_cast / details.voting.eligible_voters * 100) if details.voting.eligible_voters > 0 else 0 %}
+                    <div class="progress rounded-pill mb-2" style="height: 12px;">
+                        <div class="progress-bar bg-primary" style="width: {{ vote_progress }}%"></div>
+                    </div>
+                    <div class="d-flex justify-content-between x-small text-muted">
+                        <span>{{ details.voting.votes_cast }} / {{ details.voting.eligible_voters }} members voted</span>
+                        <div class="d-flex gap-2">
+                            <span class="fw-bold text-success">{{ details.voting.approvals }} Approvals</span>
+                            <span class="fw-bold text-danger">{{ details.voting.rejections }} Rejections</span>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-muted x-small">
+                        <i class="bi bi-info-circle me-1"></i> Requires {{ details.voting.required_approvals }} approvals
+                    </div>
+
+                {% elif loan.status in ['disbursed', 'completed'] %}
+                    <h6 class="fw-bold mb-3 small">REPAYMENT PROGRESS</h6>
+                    {% set repay_progress = (loan.total_repaid / loan.total_repayable * 100) if loan.total_repayable and loan.total_repayable > 0 else 0 %}
+                    <div class="progress rounded-pill mb-2" style="height: 12px;">
+                        <div class="progress-bar bg-success" style="width: {{ repay_progress }}%"></div>
+                    </div>
+                    <div class="d-flex justify-content-between x-small text-muted">
+                        <span>{{ "%.1f"|format(repay_progress) }}% Collected</span>
+                        <span class="fw-bold">Total: ₹{{ "{:,.0f}".format(loan.total_repayable or 0) }}</span>
+                    </div>
+                    {% if loan.status == 'disbursed' and loan.is_fully_repaid() %}
+                    <div class="mt-4 pt-3 border-top">
+                        <div class="alert alert-success mb-0 py-2">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            Loan fully repaid! Awaiting admin closure.
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endif %}
             </div>
-        {% endif %}
-    </div>
-</div>
+        </div>
 
         <!-- Pending Repayments (Admin Only) -->
         {% if is_admin and pending_repayments %}
@@ -243,10 +244,10 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                     <tbody>
                         {% for repayment in pending_repayments %}
                         <tr class="small">
-                            <td class="ps-4 fw-bold">₹{{ "%.2f"|format(repayment.amount) }}</td>
+                            <td class="ps-4 fw-bold">₹{{ "{:,.0f}".format(repayment.amount) }}</td>
                             <td class="text-muted">
-                                <span class="d-block">P: ₹{{ "%.0f"|format(repayment.principal_component or 0) }}</span>
-                                <span class="d-block">I: ₹{{ "%.0f"|format(repayment.interest_component or 0) }}</span>
+                                <span class="d-block">P: ₹{{ "{:,.0f}".format(repayment.principal_component or 0) }}</span>
+                                <span class="d-block">I: ₹{{ "{:,.0f}".format(repayment.interest_component or 0) }}</span>
                             </td>
                             <td>{{ repayment.submitted_at.strftime('%d %b') }}</td>
                             <td class="text-end pe-4">
@@ -271,7 +272,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                 </div>
                                                 <div class="modal-body text-start">
-                                                    <p>Reject repayment of <strong>₹{{ "%.2f"|format(repayment.amount) }}</strong>?</p>
+                                                    <p>Reject repayment of <strong>₹{{ "{:,.0f}".format(repayment.amount) }}</strong>?</p>
                                                     <label class="form-label small text-muted">Reason</label>
                                                     <textarea name="reason" class="form-control" required></textarea>
                                                 </div>
@@ -318,7 +319,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                         <tr class="small">
                             <td class="ps-4 text-muted">{{ emi.installment }}</td>
                             <td>{{ emi.due_date.strftime('%d %b %Y') }}</td>
-                            <td class="fw-bold">₹{{ "%.2f"|format(emi.emi_amount) }}</td>
+                            <td class="fw-bold">₹{{ "{:,.0f}".format(emi.emi_amount) }}</td>
                             <td class="text-end pe-4">
                                 {% if emi.is_paid %}
                                     <span class="text-success small"><i class="bi bi-check-circle-fill me-1"></i> Paid</span>
@@ -412,11 +413,11 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                     <div class="mb-3 small">
                         <div class="d-flex justify-content-between">
                             <span class="text-white-50">Wallet Balance:</span>
-                            <span>₹{{ "%.2f"|format(group.wallet.balance) }}</span>
+                            <span>₹{{ "{:,.0f}".format(group.wallet.balance) }}</span>
                         </div>
                         <div class="d-flex justify-content-between">
                             <span class="text-white-50">Loan Amount:</span>
-                            <span>₹{{ "%.2f"|format(loan.approved_amount) }}</span>
+                            <span>₹{{ "{:,.0f}".format(loan.approved_amount) }}</span>
                         </div>
                     </div>
                     <form action="{{ url_for('wallet.disburse', loan_id=loan.id) }}" method="POST">
@@ -425,7 +426,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                         </button>
                     </form>
 
-                {% elif loan.status == 'disbursed' and can_repay and current_user.id == loan.requested_by %}
+                {% elif loan.status == 'disbursed' and can_repay and current_user.id == loan.requested_by and not loan.is_fully_repaid() %}
                     <a href="{{ url_for('loans.repay_loan', loan_id=loan.id) }}" class="btn btn-warning w-100 py-2 fw-bold text-dark mb-2">
                         <i class="bi bi-cash-coin me-2"></i>Make Repayment
                     </a>
@@ -455,7 +456,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-bold">Loan Terms</h6>
-                {% if is_admin %}
+                {% if is_admin and loan.status in ['pending', 'pre_approved', 'approved', 'disbursed'] %}
                 <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editLoanModal">
                     <i class="bi bi-pencil-square me-1"></i> Edit
                 </button>
@@ -468,26 +469,26 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                 </div>
                 <div class="d-flex justify-content-between mb-3 small">
                     <span class="text-muted">Duration</span>
-                    <span class="fw-bold">{{ loan.loan_duration_months }} Months</span>
+                    <span class="fw-bold">{{ loan.loan_duration_months or group.default_loan_duration_months }} Months</span>
                 </div>
                 <div class="d-flex justify-content-between mb-3 small">
                     <span class="text-muted">Repayment</span>
-                    <span class="fw-bold text-uppercase">{{ loan.repayment_type or 'Not set' }}</span>
+                    <span class="fw-bold text-uppercase">{{ loan.repayment_type or group.default_repayment_type }}</span>
                 </div>
                 <div class="d-flex justify-content-between mb-3 small border-top pt-2">
                     <span class="text-muted">Total Interest</span>
-                    <span class="fw-bold text-warning">₹{{ "%.2f"|format(loan.total_interest or 0) }}</span>
+                    <span class="fw-bold text-warning">₹{{ "{:,.0f}".format(loan.total_interest or 0) }}</span>
                 </div>
                 <hr>
                 {% if loan.emi_amount %}
                 <div class="d-flex justify-content-between align-items-center">
                     <span class="text-primary fw-bold small">MONTHLY EMI</span>
-                    <span class="h5 fw-bold text-primary mb-0">₹{{ "%.2f"|format(loan.emi_amount) }}</span>
+                    <span class="h5 fw-bold text-primary mb-0">₹{{ "{:,.0f}".format(loan.emi_amount) }}</span>
                 </div>
                 {% else %}
                 <div class="d-flex justify-content-between align-items-center">
                     <span class="text-primary fw-bold small">TOTAL PAYABLE</span>
-                    <span class="h5 fw-bold text-primary mb-0">₹{{ "%.2f"|format(loan.total_repayable or 0) }}</span>
+                    <span class="h5 fw-bold text-primary mb-0">₹{{ "{:,.0f}".format(loan.total_repayable or 0) }}</span>
                 </div>
                 {% endif %}
             </div>
@@ -513,19 +514,12 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                     <span class="fw-bold">{{ loan.disbursed_at.strftime('%d %b %Y') }}</span>
                 </div>
                 {% endif %}
-                {% if loan.expected_completion %}
+                {% if loan.last_updated_at %}
                 <div class="d-flex justify-content-between mb-3 small">
-                    <span class="text-muted">Expected Completion</span>
-                    <span class="fw-bold">{{ loan.expected_completion.strftime('%d %b %Y') }}</span>
+                    <span class="text-muted">Last Updated</span>
+                    <span class="fw-bold">{{ loan.last_updated_at.strftime('%d %b %Y') }}</span>
                 </div>
                 {% endif %}
-                <!-- In detail (1).html, add this to the Important Dates section: -->
-{% if loan.last_updated_at %}
-<div class="d-flex justify-content-between mb-3 small">
-    <span class="text-muted">Last Updated</span>
-    <span class="fw-bold">{{ loan.last_updated_at.strftime('%d %b %Y') }}</span>
-</div>
-{% endif %}
             </div>
         </div>
     </div>
@@ -552,7 +546,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
 </div>
 
 <!-- Edit Loan Modal (Admin Only) -->
-{% if is_admin %}
+{% if is_admin and loan.status in ['pending', 'pre_approved', 'approved', 'disbursed'] %}
 <div class="modal fade" id="editLoanModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -572,7 +566,7 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                         {% if loan.status in ['pending', 'pre_approved'] %}
                         <div class="col-md-6">
                             <label class="form-label">Loan Amount (₹)</label>
-                            <input type="number" name="amount" class="form-control" step="0.01" min="1"
+                            <input type="number" name="amount" class="form-control" step="1" min="1"
                                    value="{{ loan.amount }}" {% if loan.status != 'pending' %}readonly{% endif %}>
                             <div class="form-text">Can only be changed while pending.</div>
                         </div>
@@ -587,14 +581,14 @@ Loan #{{ loan.id }} - ₹{{ "%.0f"|format(loan.amount) }}
                         <div class="col-md-6">
                             <label class="form-label">Duration (Months)</label>
                             <input type="number" name="loan_duration" class="form-control" min="1"
-                                   value="{{ loan.loan_duration_months }}">
+                                   value="{{ loan.loan_duration_months or group.default_loan_duration_months }}">
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">Repayment Type</label>
                             <select name="repayment_type" class="form-select">
-                                <option value="emi" {% if loan.repayment_type == 'emi' %}selected{% endif %}>EMI</option>
-                                <option value="bullet" {% if loan.repayment_type == 'bullet' %}selected{% endif %}>Bullet Payment</option>
+                                <option value="emi" {% if (loan.repayment_type or group.default_repayment_type) == 'emi' %}selected{% endif %}>EMI</option>
+                                <option value="bullet" {% if (loan.repayment_type or group.default_repayment_type) == 'bullet' %}selected{% endif %}>Bullet Payment</option>
                             </select>
                         </div>
                     </div>

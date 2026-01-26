@@ -8,9 +8,36 @@
         <h2><i class="bi bi-clock-history"></i> Transaction History</h2>
         <p class="text-muted mb-0">{{ group.name }} • Balance: ₹{{ "%.2f"|format(wallet.balance) }}</p>
     </div>
-    <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}" class="btn btn-outline-primary">
-        <i class="bi bi-arrow-left"></i> Back to Wallet
-    </a>
+    <div>
+        <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}" class="btn btn-outline-primary">
+            <i class="bi bi-arrow-left"></i> Back to Wallet
+        </a>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Filter by Type</label>
+                <select name="type" class="form-select" onchange="this.form.submit()">
+                    <option value="">All Types</option>
+                    <option value="contribution" {% if type_filter == 'contribution' %}selected{% endif %}>Contributions</option>
+                    <option value="loan_disbursement" {% if type_filter == 'loan_disbursement' %}selected{% endif %}>Loan Disbursements</option>
+                    <option value="repayment" {% if type_filter == 'repayment' %}selected{% endif %}>Repayments</option>
+                    <option value="interest_distribution" {% if type_filter == 'interest_distribution' %}selected{% endif %}>Interest Distributions</option>
+                    <option value="withdrawal" {% if type_filter == 'withdrawal' %}selected{% endif %}>Withdrawals</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Filter</button>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('wallet.transactions', group_id=group.id) }}" class="btn btn-outline-secondary w-100">Clear</a>
+            </div>
+        </form>
+    </div>
 </div>
 
 {% if transactions.items %}
@@ -20,11 +47,12 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        <th>Date</th>
+                        <th>Date & Time</th>
                         <th>Type</th>
                         <th>Amount</th>
                         <th>Description</th>
                         <th>By</th>
+                        <th>Balance After</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -41,6 +69,10 @@
                             <span class="badge bg-danger">Disbursement</span>
                             {% elif txn.transaction_type == 'repayment' %}
                             <span class="badge bg-info">Repayment</span>
+                            {% elif txn.transaction_type == 'interest_distribution' %}
+                            <span class="badge bg-warning">Interest</span>
+                            {% elif txn.transaction_type == 'withdrawal' %}
+                            <span class="badge bg-secondary">Withdrawal</span>
                             {% else %}
                             <span class="badge bg-secondary">{{ txn.transaction_type }}</span>
                             {% endif %}
@@ -53,7 +85,22 @@
                             {% endif %}
                         </td>
                         <td>{{ txn.description or '-' }}</td>
-                        <td>{{ txn.created_by_user.name }}</td>
+                        <td>
+                            {% if txn.beneficiary %}
+                                {{ txn.beneficiary.name }} (Beneficiary)
+                            {% elif txn.created_by_user %}
+                                {{ txn.created_by_user.name }}
+                            {% else %}
+                                System
+                            {% endif %}
+                        </td>
+                        <td class="text-muted">
+                            {% if txn.balance_after %}
+                            ₹{{ "%.2f"|format(txn.balance_after) }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -66,7 +113,7 @@
             <ul class="pagination justify-content-center">
                 {% if transactions.has_prev %}
                 <li class="page-item">
-                    <a class="page-link" href="{{ url_for('wallet.transactions', group_id=group.id, page=transactions.prev_num) }}">
+                    <a class="page-link" href="{{ url_for('wallet.transactions', group_id=group.id, page=transactions.prev_num, type=type_filter) }}">
                         Previous
                     </a>
                 </li>
@@ -75,7 +122,7 @@
                 {% for page in transactions.iter_pages() %}
                     {% if page %}
                     <li class="page-item {% if page == transactions.page %}active{% endif %}">
-                        <a class="page-link" href="{{ url_for('wallet.transactions', group_id=group.id, page=page) }}">
+                        <a class="page-link" href="{{ url_for('wallet.transactions', group_id=group.id, page=page, type=type_filter) }}">
                             {{ page }}
                         </a>
                     </li>
@@ -86,7 +133,7 @@
 
                 {% if transactions.has_next %}
                 <li class="page-item">
-                    <a class="page-link" href="{{ url_for('wallet.transactions', group_id=group.id, page=transactions.next_num) }}">
+                    <a class="page-link" href="{{ url_for('wallet.transactions', group_id=group.id, page=transactions.next_num, type=type_filter) }}">
                         Next
                     </a>
                 </li>
@@ -100,6 +147,9 @@
 <div class="text-center py-5">
     <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
     <h4 class="mt-3 text-muted">No transactions yet</h4>
+    {% if type_filter %}
+    <p class="text-muted">Try changing your filter settings</p>
+    {% endif %}
 </div>
 {% endif %}
 {% endblock %}

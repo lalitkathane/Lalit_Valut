@@ -3,12 +3,17 @@ GROUP MANAGEMENT ROUTES
 =======================
 Clean, simplified group management.
 """
+"""
+GROUP MANAGEMENT ROUTES
+=======================
+Clean, simplified group management.
+"""
 from datetime import datetime
 
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import Group, GroupMember, User, MemberRole, LoanRequest, LoanStatus
+from app.models import Group, GroupMember, User, MemberRole, LoanRequest, LoanStatus, MemberLedger, WithdrawalRequest
 from app.services.wallet_service import create_wallet_for_group
 from app.services.membership_service import (
     add_member, leave_group, remove_member, transfer_admin,
@@ -270,7 +275,7 @@ def transfer_admin_route(group_id):
     return render_template('groups/transfer_admin.html', group=group, eligible_members=eligible_members)
 
 
-# ============== VIEW MEMBER PROFILE ==============
+# Update the view_member function to include withdrawal info
 @groups_bp.route('/groups/<int:group_id>/member/<int:user_id>')
 @login_required
 def view_member(group_id, user_id):
@@ -285,14 +290,28 @@ def view_member(group_id, user_id):
         group_id=group_id, user_id=user_id, is_active=True
     ).first_or_404()
 
-    from app.models import MemberLedger
+    # Get member ledger
     ledger = MemberLedger.query.filter_by(
         wallet_id=group.wallet.id, user_id=user_id
     ).first() if group.wallet else None
 
+    # Get loans
     loans = LoanRequest.query.filter_by(
         group_id=group_id, requested_by=user_id, is_active=True
     ).all()
+
+    # Get withdrawal history for this member
+    withdrawals = WithdrawalRequest.query.filter_by(
+        group_id=group_id,
+        user_id=user_id
+    ).order_by(WithdrawalRequest.created_at.desc()).limit(10).all()
+
+    # Get member's financial summary from service
+    from app.services.membership_service import get_member_group_financial_summary
+    financial_summary = get_member_group_financial_summary(user_id, group_id)
+
+    # Check if current user is admin
+    is_admin = is_group_admin(current_user.id, group_id)
 
     return render_template(
         'groups/member_profile.html',
@@ -300,10 +319,11 @@ def view_member(group_id, user_id):
         member=member,
         membership=membership,
         ledger=ledger,
-        loans=loans
+        loans=loans,
+        withdrawals=withdrawals,
+        financial_summary=financial_summary,
+        is_admin=is_admin  # Add this
     )
-
-
 # In groups.py, add this route:
 
 @groups_bp.route('/groups/<int:group_id>/delete', methods=['POST'])

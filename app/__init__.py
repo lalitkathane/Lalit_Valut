@@ -1,11 +1,19 @@
 from flask import Flask
 from app.extensions import db, login_manager
 from config import Config
+import os  # ADD THIS IMPORT
 
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    # ADD THIS: Ensure instance folder exists
+    try:
+        os.makedirs(app.instance_path, exist_ok=True)
+        print(f"✅ Instance folder created/verified: {app.instance_path}")
+    except OSError as e:
+        print(f"⚠️  Could not create instance folder: {e}")
 
     # Initialize extensions
     db.init_app(app)
@@ -18,6 +26,10 @@ def create_app():
     def load_user(user_id):
         return User.query.get(int(user_id))
 
+    from app.context_processors import auth_context_processor
+
+    # ... after creating app
+    app.context_processor(auth_context_processor)
     # Register blueprints
     from app.routes.auth import auth_bp
     from app.routes.groups import groups_bp

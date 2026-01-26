@@ -16,7 +16,7 @@
                 <div class="alert alert-info mb-4">
                     <i class="bi bi-wallet2 me-2"></i>
                     <strong>Current Group Wallet Balance:</strong>
-                    ₹{{ "%.2f"|format(group.wallet.balance if group.wallet else 0) }}
+                    ₹{{ "{:,.0f}".format(group.wallet.balance if group.wallet else 0) }}
                     <br>
                     <small class="text-muted">
                         You can only request up to this amount.
@@ -34,12 +34,13 @@
                                    class="form-control"
                                    placeholder="Enter amount"
                                    min="1"
-                                   step="0.01"
+                                   step="1"
                                    max="{{ group.wallet.balance if group.wallet else 0 }}"
                                    required>
                         </div>
                         <small class="text-muted">
-                            Maximum allowed: ₹{{ "%.2f"|format(group.wallet.balance if group.wallet else 0) }}
+                            Maximum allowed: ₹{{ "{:,.0f}".format(group.wallet.balance if group.wallet else 0) }}
+                            • Must be a whole number (no decimals)
                         </small>
                     </div>
 

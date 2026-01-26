@@ -19,27 +19,35 @@
                     </div>
 
                     <div class="mb-3">
-    <label class="form-label">Email Address</label>
-    <input type="email" name="email" class="form-control"
-           placeholder="Enter your email" required>
-</div>
+                        <label class="form-label">Email Address</label>
+                        <input type="email" name="email" class="form-control"
+                               placeholder="Enter your email" required>
+                    </div>
 
-<div class="mb-3">
-    <label class="form-label">Mobile Number</label>
-    <input type="tel" name="phone" class="form-control"
-           placeholder="Enter mobile number" required>
-</div>
+                    <div class="mb-3">
+                        <label class="form-label">Mobile Number</label>
+                        <input type="tel" name="phone" class="form-control"
+                               placeholder="Enter 10-digit mobile number"
+                               pattern="[6-9][0-9]{9}"
+                               title="Enter a valid 10-digit Indian mobile number"
+                               required>
+                        <small class="text-muted">Enter without country code (e.g., 9876543210)</small>
+                    </div>
 
                     <div class="mb-3">
                         <label class="form-label">Password</label>
                         <input type="password" name="password" class="form-control"
-                               placeholder="Create password (min 6 chars)" required>
+                               placeholder="Create password (min 6 chars)"
+                               minlength="6"
+                               required>
                     </div>
 
                     <div class="mb-4">
                         <label class="form-label">Confirm Password</label>
                         <input type="password" name="confirm_password" class="form-control"
-                               placeholder="Confirm your password" required>
+                               placeholder="Confirm your password"
+                               minlength="6"
+                               required>
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100 mb-3">

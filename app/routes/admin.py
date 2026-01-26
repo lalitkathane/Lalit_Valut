@@ -145,3 +145,105 @@ def transfer_history(group_id):
         group=group,
         transfers=transfers
     )
+
+
+# Add these new routes to admin.py
+
+# ============== PENDING WITHDRAWALS ==============
+@admin_bp.route('/groups/<int:group_id>/admin/withdrawals')
+@login_required
+def pending_withdrawals(group_id):
+    """View pending withdrawal requests"""
+    group = Group.query.get_or_404(group_id)
+
+    if not is_group_admin(current_user.id, group_id):
+        flash('Admin access required!', 'danger')
+        return redirect(url_for('groups.view_group', group_id=group_id))
+
+    from app.models import WithdrawalRequest, WithdrawalStatus
+
+    withdrawals = WithdrawalRequest.query.filter_by(
+        group_id=group_id,
+        status=WithdrawalStatus.PENDING.value
+    ).order_by(WithdrawalRequest.created_at.desc()).all()
+
+    return render_template(
+        'admin/pending_withdrawals.html',
+        group=group,
+        withdrawals=withdrawals
+    )
+
+
+# ============== WITHDRAWAL DETAIL ==============
+@admin_bp.route('/admin/withdrawals/<int:withdrawal_id>')
+@login_required
+def withdrawal_detail(withdrawal_id):
+    """View withdrawal request details"""
+    from app.models import WithdrawalRequest
+    withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
+    group = withdrawal.group
+
+    if not is_group_admin(current_user.id, group.id):
+        flash('Admin access required!', 'danger')
+        return redirect(url_for('groups.view_group', group_id=group.id))
+
+    # Get member ledger details
+    from app.models import MemberLedger
+    ledger = MemberLedger.query.filter_by(
+        wallet_id=group.wallet.id,
+        user_id=withdrawal.user_id
+    ).first()
+
+    return render_template(
+        'admin/withdrawal_detail.html',
+        withdrawal=withdrawal,
+        group=group,
+        ledger=ledger
+    )
+
+
+# ============== APPROVE WITHDRAWAL ==============
+@admin_bp.route('/admin/withdrawals/<int:withdrawal_id>/approve', methods=['POST'])
+@login_required
+def approve_withdrawal_route(withdrawal_id):
+    """Approve a withdrawal request"""
+    from app.models import WithdrawalRequest
+    withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
+    group = withdrawal.group
+
+    if not is_group_admin(current_user.id, group.id):
+        flash('Admin access required!', 'danger')
+        return redirect(url_for('groups.view_group', group_id=group.id))
+
+    try:
+        from app.services.withdrawal_service import approve_withdrawal
+        withdrawal = approve_withdrawal(withdrawal_id, current_user.id)
+        flash(f'Withdrawal of ₹{withdrawal.total_amount} approved!', 'success')
+    except Exception as e:
+        flash(f'Error approving withdrawal: {str(e)}', 'danger')
+
+    return redirect(url_for('admin.pending_withdrawals', group_id=group.id))
+
+
+# ============== REJECT WITHDRAWAL ==============
+@admin_bp.route('/admin/withdrawals/<int:withdrawal_id>/reject', methods=['POST'])
+@login_required
+def reject_withdrawal_route(withdrawal_id):
+    """Reject a withdrawal request"""
+    from app.models import WithdrawalRequest
+    withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
+    group = withdrawal.group
+
+    if not is_group_admin(current_user.id, group.id):
+        flash('Admin access required!', 'danger')
+        return redirect(url_for('groups.view_group', group_id=group.id))
+
+    try:
+        reason = request.form.get('reason', '')
+        from app.services.withdrawal_service import reject_withdrawal
+        withdrawal = reject_withdrawal(withdrawal_id, current_user.id, reason)
+        flash('Withdrawal rejected.', 'warning')
+    except Exception as e:
+        flash(f'Error rejecting withdrawal: {str(e)}', 'danger')
+
+    return redirect(url_for('admin.pending_withdrawals', group_id=group.id))

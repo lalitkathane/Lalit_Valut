@@ -28,6 +28,8 @@ wallet_bp = Blueprint('wallet', __name__)
 
 
 # ============== VIEW WALLET ==============
+# Update the view_wallet function to include withdrawal info
+
 @wallet_bp.route('/groups/<int:group_id>/wallet')
 @login_required
 def view_wallet(group_id):
@@ -57,6 +59,15 @@ def view_wallet(group_id):
             is_active=True
         ).filter(LoanRequest.disbursed_at.is_(None)).all()
 
+    # Get pending withdrawals (for admin)
+    pending_withdrawals = []
+    if is_group_admin(current_user.id, group_id):
+        from app.models import WithdrawalRequest, WithdrawalStatus
+        pending_withdrawals = WithdrawalRequest.query.filter_by(
+            group_id=group_id,
+            status=WithdrawalStatus.PENDING.value
+        ).order_by(WithdrawalRequest.created_at.desc()).all()
+
     # Get active loans
     active_loans = LoanRequest.query.filter(
         LoanRequest.group_id == group_id,
@@ -70,12 +81,13 @@ def view_wallet(group_id):
         is_reversed=False
     ).order_by(WalletTransaction.created_at.desc()).limit(10).all()
 
-    # Get recent ledgers (for admin)
-    recent_ledgers = []
-    if is_group_admin(current_user.id, group_id):
-        recent_ledgers = MemberLedger.query.filter_by(
-            wallet_id=wallet.id
-        ).order_by(MemberLedger.updated_at.desc(), MemberLedger.created_at.desc()).limit(10).all()
+    # Get member's personal summary
+    from app.services.wallet_service import get_member_wallet_summary
+    personal_summary = None
+    try:
+        personal_summary = get_member_wallet_summary(wallet.id, current_user.id)
+    except:
+        pass
 
     is_admin = is_group_admin(current_user.id, group_id)
 
@@ -84,13 +96,13 @@ def view_wallet(group_id):
         group=group,
         wallet=wallet,
         summary=summary,
-        recent_ledgers=recent_ledgers,
+        personal_summary=personal_summary,
         pending_disbursements=pending_disbursements,
+        pending_withdrawals=pending_withdrawals,
         active_loans=active_loans,
         recent_transactions=recent_transactions,
         is_admin=is_admin
     )
-
 
 # ============== MAKE CONTRIBUTION ==============
 @wallet_bp.route('/groups/<int:group_id>/wallet/contribute', methods=['GET', 'POST'])
@@ -364,4 +376,135 @@ def interest_distributions(group_id):
         group=group,
         distributions=distributions,
         total_earned=total_earned
+    )
+
+
+# Add these new routes to wallet.py
+
+# ============== WITHDRAW FROM WALLET ==============
+@wallet_bp.route('/groups/<int:group_id>/wallet/withdraw', methods=['GET', 'POST'])
+@login_required
+def withdraw_from_wallet(group_id):
+    """Member withdraws from wallet"""
+    group = Group.query.get_or_404(group_id)
+
+    if not is_group_member(current_user.id, group_id):
+        flash('You are not a member of this group!', 'danger')
+        return redirect(url_for('groups.list_groups'))
+
+    wallet = group.wallet
+    if not wallet:
+        flash('This group does not have a wallet!', 'danger')
+        return redirect(url_for('groups.view_group', group_id=group_id))
+
+    from app.services.withdrawal_service import get_withdrawable_amounts
+    from app.models import MemberLedger
+
+    # Get withdrawable amounts
+    withdrawable = get_withdrawable_amounts(current_user.id, group_id)
+    if 'error' in withdrawable:
+        flash(withdrawable['error'], 'danger')
+        return redirect(url_for('wallet.view_wallet', group_id=group_id))
+
+    # Get member ledger
+    ledger = MemberLedger.query.filter_by(
+        wallet_id=wallet.id,
+        user_id=current_user.id
+    ).first()
+
+    if request.method == 'POST':
+        try:
+            principal_amount = float(request.form.get('principal_amount', 0))
+            interest_amount = float(request.form.get('interest_amount', 0))
+            withdrawal_type = request.form.get('withdrawal_type', 'principal_only')
+            membership_action = request.form.get('membership_action', 'keep_active')
+
+            if principal_amount <= 0 and interest_amount <= 0:
+                flash('Please specify an amount to withdraw!', 'danger')
+                return redirect(url_for('wallet.withdraw_from_wallet', group_id=group_id))
+
+            from app.services.withdrawal_service import create_withdrawal_request
+            withdrawal = create_withdrawal_request(
+                user_id=current_user.id,
+                group_id=group_id,
+                principal_amount=principal_amount,
+                interest_amount=interest_amount,
+                withdrawal_type=withdrawal_type,
+                membership_action=membership_action
+            )
+
+            flash(f'Withdrawal request of ₹{withdrawal.total_amount} submitted! Awaiting admin approval.', 'success')
+            return redirect(url_for('wallet.view_wallet', group_id=group_id))
+
+        except Exception as e:
+            flash(str(e), 'danger')
+
+    return render_template(
+        'wallet/withdraw.html',
+        group=group,
+        wallet=wallet,
+        ledger=ledger,
+        withdrawable=withdrawable
+    )
+
+
+# ============== WITHDRAWAL HISTORY ==============
+@wallet_bp.route('/groups/<int:group_id>/wallet/withdrawal-history')
+@login_required
+def withdrawal_history(group_id):
+    """View withdrawal history for this group"""
+    group = Group.query.get_or_404(group_id)
+
+    if not is_group_member(current_user.id, group_id):
+        flash('You are not a member of this group!', 'danger')
+        return redirect(url_for('groups.list_groups'))
+
+    from app.models import WithdrawalRequest
+
+    # If admin, show all withdrawals; if member, show only their own
+    if is_group_admin(current_user.id, group_id):
+        withdrawals = WithdrawalRequest.query.filter_by(
+            group_id=group_id
+        ).order_by(WithdrawalRequest.created_at.desc()).all()
+    else:
+        withdrawals = WithdrawalRequest.query.filter_by(
+            group_id=group_id,
+            user_id=current_user.id
+        ).order_by(WithdrawalRequest.created_at.desc()).all()
+
+    return render_template(
+        'wallet/withdrawal_history.html',
+        group=group,
+        withdrawals=withdrawals
+    )
+
+
+# ============== PERSONAL WALLET SUMMARY ==============
+@wallet_bp.route('/groups/<int:group_id>/wallet/my-summary')
+@login_required
+def personal_wallet_summary(group_id):
+    """Get personal wallet summary for a member"""
+    group = Group.query.get_or_404(group_id)
+
+    if not is_group_member(current_user.id, group_id):
+        flash('You are not a member of this group!', 'danger')
+        return redirect(url_for('groups.list_groups'))
+
+    wallet = group.wallet
+    if not wallet:
+        flash('This group does not have a wallet!', 'danger')
+        return redirect(url_for('groups.view_group', group_id=group_id))
+
+    from app.services.wallet_service import get_member_wallet_summary
+    try:
+        summary = get_member_wallet_summary(wallet.id, current_user.id)
+    except Exception as e:
+        flash(f'Error loading summary: {str(e)}', 'danger')
+        summary = None
+
+    return render_template(
+        'wallet/personal_summary.html',
+        group=group,
+        wallet=wallet,
+        summary=summary
     )

@@ -4,31 +4,75 @@
 
 {% block content %}
 <div class="container py-4">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card border-0 shadow-sm rounded-4 mb-5">
-                <div class="card-header bg-primary text-white p-3 rounded-top-4">
-                    <h5 class="mb-0">
-                        <i class="bi bi-gear-fill me-2"></i> Group Settings
-                    </h5>
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <!-- Group Settings Card -->
+            <div class="card border-0 shadow-sm rounded-4 mb-5">
+                <div class="card-header bg-primary text-white p-4 rounded-top-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0 fw-bold">
+                                <i class="bi bi-gear-fill me-2"></i> Group Settings
+                            </h5>
+                            <small class="opacity-75">Configure your group's preferences and policies</small>
+                        </div>
+                        <span class="badge bg-light text-primary">Admin Only</span>
+                    </div>
+                </div>
+                
                 <div class="card-body p-4">
                     <form id="groupForm" action="{{ url_for('groups.group_settings', group_id=group.id) }}" method="POST">
                         {% include 'groups/_form.html' %}
 
+                        <!-- Loan Policy Extensions -->
                         <div class="mt-4 pt-4 border-top">
-                            <h6 class="fw-bold mb-3 text-primary">Loan Policy Extensions</h6>
-                            <div class="mb-3">
-                                <label class="form-label fw-bold small">Minimum EMI Duration (Months)</label>
-                                <input type="number" name="min_emi_duration" class="form-control form-control-lg"
-                                       value="{{ group.min_emi_duration_months if group.min_emi_duration_months is not none else 3 }}" min="1" max="60">
-                                <div class="form-text">The shortest timeframe allowed for any member to repay a loan.</div>
+                            <h6 class="fw-bold mb-3 text-primary">
+                                <i class="bi bi-shield-check me-2"></i> Loan Policy Settings
+                            </h6>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">Minimum EMI Duration (Months)</label>
+                                    <input type="number" name="min_emi_duration" class="form-control" 
+                                           value="{{ group.min_emi_duration_months if group.min_emi_duration_months is not none else 3 }}" 
+                                           min="1" max="60" step="1">
+                                    <div class="form-text">
+                                        Minimum repayment period for EMI-based loans. Shorter durations increase monthly payments.
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="bg-light p-3 rounded-3 h-100">
+                                        <h6 class="fw-bold small mb-2">Current Policy</h6>
+                                        <ul class="small text-muted mb-0">
+                                            <li>Interest Rate: {{ "%.1f"|format(group.default_interest_rate) }}%</li>
+                                            <li>Max Duration: {{ group.default_loan_duration_months }} months</li>
+                                            <li>Repayment: {{ group.default_repayment_type|upper }}</li>
+                                            <li>Interest Type: {{ 'Flat Rate' if group.use_flat_rate else 'Reducing Balance' }}</li>
+                                            <li>Min EMI Duration: {{ group.min_emi_duration_months if group.min_emi_duration_months is not none else 3 }} months</li>
+                                        </ul>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
+                        <!-- Save Changes Button -->
                         <div class="d-flex gap-2 mt-4 pt-4 border-top justify-content-end">
-                            <a href="{{ url_for('groups.view_group', group_id=group.id) }}" class="btn btn-outline-secondary px-4">
-                                Cancel
+                            <a href="{{ url_for('groups.view_group', group_id=group.id) }}" 
+                               class="btn btn-outline-secondary px-4">
+                                <i class="bi bi-x-circle me-1"></i> Cancel
                             </a>
                             <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm">
                                 <i class="bi bi-check-lg me-1"></i> Save Changes
@@ -38,45 +82,124 @@
                 </div>
             </div>
 
+            <!-- Danger Zone (Admin Only) -->
             {% if is_admin %}
-            <div class="card border-danger">
+            <div class="card border-danger border-2">
                 <div class="card-header bg-danger text-white py-3">
-                    <i class="bi bi-exclamation-triangle me-2"></i> Danger Zone
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                        <h5 class="mb-0 fw-bold">Danger Zone</h5>
+                    </div>
                 </div>
+                
                 <div class="card-body p-4">
-                    <h6 class="fw-bold mb-3">Delete Group</h6>
-                    <p class="text-muted small mb-4">
-                        This will permanently delete the group and all its data.
-                        This action cannot be undone.
-                    </p>
+                    <!-- Delete Group Section -->
+                    <div class="mb-4">
+                        <h6 class="fw-bold mb-3 text-danger">Delete Group</h6>
+                        <p class="text-muted mb-4">
+                            This will permanently delete the group and all associated data including:
+                            wallet transactions, loan history, member contributions, and all financial records.
+                            <strong class="text-danger">This action cannot be undone.</strong>
+                        </p>
 
-                    <!-- Conditions Check -->
-                    {% set total_members = members|length %}
-                    {% set current_balance = wallet.balance if wallet else 0 %}
+                        <!-- Pre-deletion Requirements -->
+                        <div class="alert alert-warning">
+                            <h6 class="fw-bold mb-2">
+                                <i class="bi bi-clipboard-check me-2"></i> Requirements Before Deletion:
+                            </h6>
+                            <ul class="mb-0">
+                                <!-- Check members -->
+                                {% set total_members = members|length %}
+                                {% if total_members > 1 %}
+                                <li class="text-danger fw-bold">
+                                    <i class="bi bi-x-circle me-1"></i>
+                                    Remove all {{ total_members - 1 }} other member(s) first
+                                </li>
+                                {% else %}
+                                <li class="text-success">
+                                    <i class="bi bi-check-circle me-1"></i>
+                                    No other active members ({{ total_members }} total)
+                                </li>
+                                {% endif %}
 
-                    {% if total_members > 1 %}
-                    <div class="alert alert-warning small mb-3">
-                        <i class="bi bi-people-fill me-1"></i>
-                        Remove all {{ total_members - 1 }} other member(s) first.
+                                <!-- Check balance -->
+                                {% set current_balance = wallet.balance if wallet else 0 %}
+                                {% if current_balance > 0 %}
+                                <li class="text-danger fw-bold">
+                                    <i class="bi bi-x-circle me-1"></i>
+                                    Clear group balance (₹{{ "{:,.0f}".format(current_balance) }}) first
+                                </li>
+                                {% else %}
+                                <li class="text-success">
+                                    <i class="bi bi-check-circle me-1"></i>
+                                    Group balance is zero (₹{{ "{:,.2f}".format(current_balance) }})
+                                </li>
+                                {% endif %}
+
+                                <!-- Check active loans -->
+                                {% set active_loans = group.loan_requests.filter_by(is_active=True, status='disbursed').count() %}
+                                {% if active_loans > 0 %}
+                                <li class="text-danger fw-bold">
+                                    <i class="bi bi-x-circle me-1"></i>
+                                    {{ active_loans }} active loan(s) must be fully repaid
+                                </li>
+                                {% else %}
+                                <li class="text-success">
+                                    <i class="bi bi-check-circle me-1"></i>
+                                    No active loans
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+
+                        <!-- Delete Button -->
+                        <div class="mt-4">
+                            <form action="{{ url_for('groups.delete_group_route', group_id=group.id) }}" 
+                                  method="POST" 
+                                  onsubmit="return confirmDelete()">
+                                
+                                <div class="mb-3">
+                                    <label for="deleteConfirmation" class="form-label fw-semibold">
+                                        Type group name to confirm deletion:
+                                    </label>
+                                    <input type="text" 
+                                           id="deleteConfirmation" 
+                                           class="form-control" 
+                                           placeholder="Type '{{ group.name }}' to confirm"
+                                           oninput="validateDeletion()">
+                                    <div class="form-text text-danger">
+                                        This action is permanent and irreversible
+                                    </div>
+                                </div>
+
+                                <button type="submit" 
+                                        id="deleteButton"
+                                        class="btn btn-danger w-100"
+                                        {% if total_members > 1 or current_balance > 0 or active_loans > 0 %}disabled{% endif %}>
+                                    <i class="bi bi-trash3 me-2"></i> Permanently Delete "{{ group.name }}"
+                                </button>
+                            </form>
+                        </div>
                     </div>
-                    {% endif %}
 
-                    {% if current_balance > 0 %}
-                    <div class="alert alert-warning small mb-3">
-                        <i class="bi bi-wallet2 me-1"></i>
-                        Clear group balance (₹{{ "{:,.0f}".format(current_balance) }}) first.
+                    <!-- Additional Admin Actions -->
+                    <div class="pt-4 border-top">
+                        <h6 class="fw-bold mb-3">Other Administrative Actions</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <a href="{{ url_for('groups.transfer_admin_route', group_id=group.id) }}" 
+                                   class="btn btn-outline-warning w-100">
+                                    <i class="bi bi-arrow-left-right me-1"></i> Transfer Admin Rights
+                                </a>
+                            </div>
+                            <div class="col-md-6">
+                                <a href="{{ url_for('groups.add_member_route', group_id=group.id) }}" 
+                                   class="btn btn-outline-success w-100">
+                                    <i class="bi bi-person-plus me-1"></i> Add New Member
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                    {% endif %}
-
-                    <!-- Delete Button -->
-                    <form action="{{ url_for('groups.delete_group_route', group_id=group.id) }}" method="POST">
-                        <button type="submit"
-                                class="btn btn-danger w-100"
-                                {% if total_members > 1 or current_balance > 0 %}disabled{% endif %}
-                                onclick="return confirm('Delete {{ group.name }} permanently? This cannot be undone.')">
-                            <i class="bi bi-trash me-1"></i> Delete Group
-                        </button>
-                    </form>
                 </div>
             </div>
             {% endif %}
@@ -85,8 +208,44 @@
 </div>
 
 <style>
-    .rounded-4 { border-radius: 1rem !important; }
-    .bg-opacity-10 { --bs-bg-opacity: 0.1; }
-    .x-small { font-size: 0.75rem; }
+    .rounded-4 {
+        border-radius: 1rem !important;
+    }
+    
+    .bg-opacity-10 {
+        --bs-bg-opacity: 0.1;
+    }
+    
+    .form-control:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    
+    .border-2 {
+        border-width: 2px !important;
+    }
 </style>
+
+<script>
+function confirmDelete() {
+    const groupName = "{{ group.name }}";
+    const confirmation = document.getElementById('deleteConfirmation').value;
+    
+    if (confirmation !== groupName) {
+        alert(`Please type "${groupName}" exactly to confirm deletion.`);
+        return false;
+    }
+    
+    return confirm(`Are you absolutely sure you want to delete "${groupName}" permanently?\n\nThis will delete:\n• All member contributions\n• Loan history\n• Financial transactions\n• Group data\n\nThis action CANNOT BE UNDONE.`);
+}
+
+function validateDeletion() {
+    const groupName = "{{ group.name }}";
+    const input = document.getElementById('deleteConfirmation').value;
+    const button = document.getElementById('deleteButton');
+    
+    // Enable button only if input matches exactly
+    button.disabled = input !== groupName;
+}
+</script>
 {% endblock %}

@@ -49,6 +49,7 @@ class TransactionType(Enum):
     REPAYMENT = 'repayment'
     INTEREST_DISTRIBUTION = 'interest_distribution'
     REFUND = 'refund'
+    WITHDRAWAL = 'withdrawal'
 
 class RepaymentStatus(Enum):
     """Repayment approval states"""
@@ -61,9 +62,15 @@ class MemberRole(Enum):
     ADMIN = 'admin'
     MEMBER = 'member'
 
+class WithdrawalStatus(Enum):
+    """Withdrawal request states"""
+    PENDING = 'pending'
+    APPROVED = 'approved'
+    REJECTED = 'rejected'
+    PROCESSED = 'processed'
 
 # ============================================================
-# USER MODEL
+# USER MODEL - FIXED
 # ============================================================
 class User(UserMixin, db.Model):
     """Core user entity."""
@@ -77,7 +84,7 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
+    # Relationships - FIXED: removed withdrawal_requests relationship here
     groups_created = db.relationship('Group', backref='creator', lazy='dynamic')
     memberships = db.relationship('GroupMember', backref='user', lazy='dynamic',
                                   foreign_keys='GroupMember.user_id')
@@ -88,6 +95,8 @@ class User(UserMixin, db.Model):
     repayments = db.relationship('LoanRepayment', backref='payer', lazy='dynamic',
                                  foreign_keys='LoanRepayment.paid_by')
     member_ledgers = db.relationship('MemberLedger', backref='member', lazy='dynamic')
+    # REMOVED: withdrawal_requests = db.relationship('WithdrawalRequest', foreign_keys='WithdrawalRequest.user_id',
+    #                                              backref='withdrawal_user', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -99,9 +108,26 @@ class User(UserMixin, db.Model):
         """Get only active group memberships"""
         return self.memberships.filter_by(is_active=True)
 
+    def get_financial_summary(self):
+        """Get or create financial summary"""
+        from app.models import MemberFinancialSummary
+        summary = MemberFinancialSummary.query.filter_by(user_id=self.id).first()
+        if not summary:
+            summary = MemberFinancialSummary(user_id=self.id)
+            db.session.add(summary)
+            db.session.commit()
+        if summary.is_dirty:
+            summary.recalculate_from_ledgers()
+            db.session.commit()
+        return summary
+
+    def get_dashboard_data(self):
+        """Get comprehensive dashboard data"""
+        from app.services.member_service import get_member_dashboard
+        return get_member_dashboard(self.id)
+
     def __repr__(self):
         return f'<User {self.id}: {self.name}>'
-
 
 # ============================================================
 # GROUP MODEL (UPDATED WITH NEW FIELDS)
@@ -122,13 +148,13 @@ class Group(db.Model):
     default_interest_rate = db.Column(db.Float, default=12.0)  # Annual %
     default_loan_duration_months = db.Column(db.Integer, default=12)
     default_repayment_type = db.Column(db.String(20), default=RepaymentType.EMI.value)
-    use_flat_rate = db.Column(db.Boolean, default=False, nullable=False)  # NEW: Flat rate option
+    use_flat_rate = db.Column(db.Boolean, default=False, nullable=False)
 
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    min_emi_duration_months = db.Column(db.Integer, default=3)  # Minimum 1 month
+    min_emi_duration_months = db.Column(db.Integer, default=3)
 
     # Relationships
     members = db.relationship('GroupMember', backref='group', lazy='dynamic',
@@ -137,6 +163,7 @@ class Group(db.Model):
                                     cascade='all, delete-orphan')
     wallet = db.relationship('GroupWallet', backref='group', uselist=False,
                              cascade='all, delete-orphan')
+    withdrawals = db.relationship('WithdrawalRequest', backref='withdrawal_group', lazy='dynamic')
 
     def get_active_member_count(self):
         """Return count of active members only"""
@@ -162,6 +189,26 @@ class Group(db.Model):
     def get_admin(self):
         """Get first active admin (for backward compatibility)"""
         return self.members.filter_by(role=MemberRole.ADMIN.value, is_active=True).first()
+
+    def get_member_contributions_summary(self):
+        """Get summary of all member contributions"""
+        summaries = []
+        for member in self.members.filter_by(is_active=True).all():
+            ledger = MemberLedger.query.filter_by(
+                wallet_id=self.wallet.id,
+                user_id=member.user_id
+            ).first()
+            if ledger:
+                summaries.append({
+                    'user_id': member.user_id,
+                    'user_name': member.user.name,
+                    'principal_contributed': ledger.principal_contributed,
+                    'net_principal': ledger.net_principal,
+                    'interest_earned': ledger.interest_earned,
+                    'net_interest': ledger.net_interest,
+                    'total_balance': ledger.total_balance
+                })
+        return summaries
 
     def __repr__(self):
         return f'<Group {self.id}: {self.name}>'
@@ -204,6 +251,12 @@ class GroupMember(db.Model):
         self.deleted_at = datetime.utcnow()
         self.deleted_reason = reason
 
+    def reactivate(self):
+        """Reactivate this membership"""
+        self.is_active = True
+        self.deleted_at = None
+        self.deleted_reason = None
+
     def __repr__(self):
         status = "active" if self.is_active else "inactive"
         return f'<GroupMember user={self.user_id} group={self.group_id} {status}>'
@@ -232,6 +285,7 @@ class GroupWallet(db.Model):
     total_contributed = db.Column(db.Float, default=0.0, nullable=False)
     total_disbursed = db.Column(db.Float, default=0.0, nullable=False)
     total_interest_earned = db.Column(db.Float, default=0.0, nullable=False)
+    total_withdrawn = db.Column(db.Float, default=0.0, nullable=False)
 
     # Cache management
     is_dirty = db.Column(db.Boolean, default=False, nullable=False)
@@ -254,24 +308,132 @@ class GroupWallet(db.Model):
         self.is_dirty = False
         self.last_recalculated_at = datetime.utcnow()
 
+    def recalculate_balance(self):
+        """Recalculate all cached values from ledger"""
+        from sqlalchemy import func
+
+        # Calculate from transactions
+        result = db.session.query(
+            func.sum(WalletTransaction.amount).label('balance'),
+            func.sum(db.case((WalletTransaction.transaction_type == 'contribution', WalletTransaction.amount), else_=0)).label('total_contributed'),
+            func.sum(db.case((WalletTransaction.transaction_type == 'loan_disbursement', -WalletTransaction.amount), else_=0)).label('total_disbursed'),
+            func.sum(db.case((WalletTransaction.transaction_type == 'withdrawal', -WalletTransaction.amount), else_=0)).label('total_withdrawn')
+        ).filter(
+            WalletTransaction.wallet_id == self.id,
+            WalletTransaction.is_reversed == False
+        ).first()
+
+        if result.balance:
+            self.balance = result.balance
+            self.total_contributed = result.total_contributed or 0
+            self.total_disbursed = result.total_disbursed or 0
+            self.total_withdrawn = result.total_withdrawn or 0
+
+        self.mark_clean()
+
     def __repr__(self):
         dirty = " [DIRTY]" if self.is_dirty else ""
         return f'<GroupWallet group={self.group_id} balance={self.balance}{dirty}>'
 
 
 # ============================================================
-# MEMBER LEDGER MODEL
+# MEMBER FINANCIAL SUMMARY MODEL (NEW)
+# ============================================================
+class MemberFinancialSummary(db.Model):
+    """
+    Tracks member's financial status ACROSS ALL GROUPS.
+    This is for personal dashboard view.
+    """
+    __tablename__ = 'member_financial_summaries'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=False)
+
+    # Total across all groups (recalculated from MemberLedger)
+    total_principal_contributed = db.Column(db.Float, default=0.0, nullable=False)
+    total_principal_withdrawn = db.Column(db.Float, default=0.0, nullable=False)
+    total_interest_earned = db.Column(db.Float, default=0.0, nullable=False)
+    total_interest_withdrawn = db.Column(db.Float, default=0.0, nullable=False)
+    total_balance = db.Column(db.Float, default=0.0, nullable=False)
+
+    # Calculated properties
+    @property
+    def net_principal(self):
+        return self.total_principal_contributed - self.total_principal_withdrawn
+
+    @property
+    def net_interest(self):
+        return self.total_interest_earned - self.total_interest_withdrawn
+
+    # Available for withdrawal (principal from active memberships)
+    withdrawable_principal = db.Column(db.Float, default=0.0, nullable=False)
+
+    # Cache management
+    last_calculated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_dirty = db.Column(db.Boolean, default=False, nullable=False)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship
+    user = db.relationship('User', backref=db.backref('financial_summary', uselist=False))
+
+    def recalculate_from_ledgers(self):
+        """Recalculate totals from all MemberLedger records"""
+        ledgers = MemberLedger.query.filter_by(user_id=self.user_id).all()
+
+        self.total_principal_contributed = sum(l.principal_contributed for l in ledgers)
+        self.total_principal_withdrawn = sum(l.principal_withdrawn for l in ledgers)
+        self.total_interest_earned = sum(l.interest_earned for l in ledgers)
+        self.total_interest_withdrawn = sum(l.interest_withdrawn for l in ledgers)
+        self.total_balance = sum(l.total_balance for l in ledgers)
+
+        # Withdrawable principal = sum of net principal from ACTIVE memberships
+        withdrawable = 0
+        for ledger in ledgers:
+            membership = GroupMember.query.filter_by(
+                group_id=ledger.wallet.group_id,
+                user_id=self.user_id,
+                is_active=True
+            ).first()
+            if membership:
+                withdrawable += ledger.net_principal
+
+        self.withdrawable_principal = withdrawable
+        self.is_dirty = False
+        self.last_calculated_at = datetime.utcnow()
+
+    def get_summary(self):
+        """Get summary dictionary"""
+        if self.is_dirty:
+            self.recalculate_from_ledgers()
+
+        return {
+            'total_principal_contributed': self.total_principal_contributed,
+            'total_principal_withdrawn': self.total_principal_withdrawn,
+            'net_principal': self.net_principal,
+            'total_interest_earned': self.total_interest_earned,
+            'total_interest_withdrawn': self.total_interest_withdrawn,
+            'net_interest': self.net_interest,
+            'total_balance': self.total_balance,
+            'withdrawable_principal': self.withdrawable_principal
+        }
+
+    def __repr__(self):
+        return f'<MemberFinancialSummary user={self.user_id} total=₹{self.total_balance}>'
+
+
+# ============================================================
+# MEMBER LEDGER MODEL (UPDATED)
 # ============================================================
 class MemberLedger(db.Model):
     """
-    Personal contribution and earnings ledger for each member.
+    Personal contribution and earnings ledger for each member PER GROUP.
 
     Tracks:
-    - Principal contributed
-    - Interest earned from loans
-    - Current balance (principal + interest)
-
-    Used for profit distribution when loans are repaid.
+    - Principal contributed and withdrawn
+    - Interest earned and withdrawn
+    - Historical totals (never decrease)
     """
     __tablename__ = 'member_ledgers'
 
@@ -281,27 +443,90 @@ class MemberLedger(db.Model):
 
     # Financial tracking
     principal_contributed = db.Column(db.Float, default=0.0, nullable=False)
+    principal_withdrawn = db.Column(db.Float, default=0.0, nullable=False)
     interest_earned = db.Column(db.Float, default=0.0, nullable=False)
-    total_balance = db.Column(db.Float, default=0.0, nullable=False)  # principal + interest
+    interest_withdrawn = db.Column(db.Float, default=0.0, nullable=False)
+
+    # Historical tracking (never decreases)
+    total_principal_ever = db.Column(db.Float, default=0.0, nullable=False)
+    total_interest_ever = db.Column(db.Float, default=0.0, nullable=False)
 
     # Tracking
     last_contribution_at = db.Column(db.DateTime, nullable=True)
+    last_withdrawal_at = db.Column(db.DateTime, nullable=True)
     last_interest_credit_at = db.Column(db.DateTime, nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Calculated properties
+    @property
+    def net_principal(self):
+        return self.principal_contributed - self.principal_withdrawn
+
+    @property
+    def net_interest(self):
+        return self.interest_earned - self.interest_withdrawn
+
+    @property
+    def total_balance(self):
+        return self.net_principal + self.net_interest
 
     # Unique constraint
     __table_args__ = (
         db.UniqueConstraint('wallet_id', 'user_id', name='unique_member_ledger'),
     )
 
-    def update_balance(self):
-        """Recalculate total balance"""
-        self.total_balance = self.principal_contributed + self.interest_earned
+    def add_contribution(self, amount):
+        """Add a contribution"""
+        self.principal_contributed += amount
+        self.total_principal_ever += amount
+        self.last_contribution_at = datetime.utcnow()
+
+    def add_interest(self, amount):
+        """Add earned interest"""
+        self.interest_earned += amount
+        self.total_interest_ever += amount
+        self.last_interest_credit_at = datetime.utcnow()
+
+    def withdraw(self, principal_amount=0, interest_amount=0):
+        """Process a withdrawal"""
+        if principal_amount > 0:
+            if principal_amount > self.net_principal:
+                raise ValueError("Insufficient principal balance")
+            self.principal_withdrawn += principal_amount
+
+        if interest_amount > 0:
+            if interest_amount > self.net_interest:
+                raise ValueError("Insufficient interest balance")
+            self.interest_withdrawn += interest_amount
+
+        self.last_withdrawal_at = datetime.utcnow()
+
+    def get_dashboard_summary(self):
+        """Get summary for member dashboard"""
+        group = self.wallet.group
+        return {
+            'group_id': group.id,
+            'group_name': group.name,
+            'principal_contributed': self.principal_contributed,
+            'principal_withdrawn': self.principal_withdrawn,
+            'net_principal': self.net_principal,
+            'interest_earned': self.interest_earned,
+            'interest_withdrawn': self.interest_withdrawn,
+            'net_interest': self.net_interest,
+            'total_balance': self.total_balance,
+            'total_principal_ever': self.total_principal_ever,
+            'total_interest_ever': self.total_interest_ever,
+            'is_active_member': group.members.filter_by(
+                user_id=self.user_id,
+                is_active=True
+            ).first() is not None
+        }
 
     def __repr__(self):
-        return f'<MemberLedger user={self.user_id} balance={self.total_balance}>'
+        return f'<MemberLedger user={self.user_id} group={self.wallet.group_id} balance=₹{self.total_balance}>'
+
 
 # ============================================================
 # MEMBER CONTRIBUTION MODEL
@@ -329,10 +554,128 @@ class MemberContribution(db.Model):
 
 
 # ============================================================
-# WALLET TRANSACTION MODEL (LEDGER - UPDATED)
+# WITHDRAWAL REQUEST MODEL - FIXED
 # ============================================================
+class WithdrawalRequest(db.Model):
+    """
+    Handles member withdrawals from groups.
+    Members can withdraw their principal (and optionally interest).
+    """
+    __tablename__ = 'withdrawal_requests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
+
+    # Withdrawal details
+    withdrawal_type = db.Column(db.String(20), nullable=False)  # 'principal_only', 'with_interest'
+    principal_amount = db.Column(db.Float, nullable=False)
+    interest_amount = db.Column(db.Float, default=0.0, nullable=False)
+    total_amount = db.Column(db.Float, nullable=False)
+
+    # Status workflow
+    status = db.Column(db.String(20), default=WithdrawalStatus.PENDING.value, nullable=False)
+
+    # Approval details
+    approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.String(255), nullable=True)
+
+    # Processing details
+    processed_at = db.Column(db.DateTime, nullable=True)
+    transaction_id = db.Column(db.Integer, db.ForeignKey('wallet_transactions.id'), nullable=True)
+
+    # Resulting membership state
+    membership_action = db.Column(db.String(20), nullable=True)  # 'deactivate', 'keep_active'
+    new_membership_status = db.Column(db.Boolean, default=True)
+
+    # Idempotency
+    idempotency_key = db.Column(db.String(64), unique=True, nullable=False)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships - FIXED: Changed backref name
+    user = db.relationship('User', foreign_keys=[user_id], backref='withdrawal_requests')
+    group = db.relationship('Group', backref='withdrawal_requests')  # Changed backref name
+    approver = db.relationship('User', foreign_keys=[approved_by])
+
+    def approve(self, admin_user_id):
+        """Approve withdrawal request"""
+        if self.status != WithdrawalStatus.PENDING.value:
+            raise ValueError(f"Cannot approve withdrawal in {self.status} status")
+
+        self.status = WithdrawalStatus.APPROVED.value
+        self.approved_by = admin_user_id
+        self.approved_at = datetime.utcnow()
+
+    def reject(self, admin_user_id, reason=None):
+        """Reject withdrawal request"""
+        if self.status != WithdrawalStatus.PENDING.value:
+            raise ValueError(f"Cannot reject withdrawal in {self.status} status")
+
+        self.status = WithdrawalStatus.REJECTED.value
+        self.approved_by = admin_user_id
+        self.approved_at = datetime.utcnow()
+        self.rejection_reason = reason
+
+    def process_withdrawal(self):
+        """Process the withdrawal - update all related records"""
+        if self.status != WithdrawalStatus.APPROVED.value:
+            raise ValueError("Withdrawal must be approved before processing")
+
+        # 1. Create WalletTransaction (negative amount)
+        transaction = WalletTransaction(
+            wallet_id=self.group.wallet.id,
+            transaction_type=TransactionType.WITHDRAWAL.value,
+            amount=-self.total_amount,
+            created_by=self.user_id,
+            reference_type='withdrawal_request',
+            reference_id=self.id,
+            description=f"Withdrawal by user {self.user_id}",
+            idempotency_key=WalletTransaction.generate_idempotency_key()
+        )
+        db.session.add(transaction)
+
+        # 2. Update MemberLedger
+        member_ledger = MemberLedger.query.filter_by(
+            wallet_id=self.group.wallet.id,
+            user_id=self.user_id
+        ).first()
+
+        if member_ledger:
+            member_ledger.withdraw(
+                principal_amount=self.principal_amount,
+                interest_amount=self.interest_amount
+            )
+
+        # 3. Update membership if deactivating
+        if self.membership_action == 'deactivate':
+            membership = GroupMember.query.filter_by(
+                group_id=self.group_id,
+                user_id=self.user_id,
+                is_active=True
+            ).first()
+            if membership:
+                membership.soft_delete(reason="Withdrew from group")
+
+        # 4. Mark GroupWallet as dirty
+        self.group.wallet.mark_dirty()
+
+        # 5. Mark member's financial summary as dirty
+        summary = MemberFinancialSummary.query.filter_by(user_id=self.user_id).first()
+        if summary:
+            summary.is_dirty = True
+
+        self.status = WithdrawalStatus.PROCESSED.value
+        self.processed_at = datetime.utcnow()
+        self.transaction_id = transaction.id
+
+    def __repr__(self):
+        return f'<WithdrawalRequest user={self.user_id} amount=₹{self.total_amount} status={self.status}>'
+
 # ============================================================
-# WALLET TRANSACTION MODEL (LEDGER - FIXED)
+# WALLET TRANSACTION MODEL (LEDGER)
 # ============================================================
 class WalletTransaction(db.Model):
     """
@@ -375,7 +718,7 @@ class WalletTransaction(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # ✅ ADD THESE RELATIONSHIPS
+    # Relationships
     created_by_user = db.relationship('User', foreign_keys=[created_by], backref='transactions_created')
     beneficiary = db.relationship('User', foreign_keys=[beneficiary_id], backref='interest_received')
     reversed_by_user = db.relationship('User', foreign_keys=[reversed_by_id])
@@ -389,20 +732,13 @@ class WalletTransaction(db.Model):
     def __repr__(self):
         return f'<WalletTransaction {self.transaction_type} amount={self.amount}>'
 
+
 # ============================================================
-# LOAN REQUEST MODEL (MAJOR UPDATE)
+# LOAN REQUEST MODEL
 # ============================================================
 class LoanRequest(db.Model):
     """
     Loan request with explicit state machine.
-
-    STATE MACHINE:
-    PENDING → APPROVED → DISBURSED → COMPLETED
-           ↘ REJECTED
-
-    VOTING INTEGRITY:
-    - total_eligible_voters is FROZEN at creation
-    - Member changes don't affect ongoing votes
     """
     __tablename__ = 'loan_requests'
 
@@ -414,7 +750,7 @@ class LoanRequest(db.Model):
     amount = db.Column(db.Float, nullable=False)
     reason = db.Column(db.String(500), nullable=False)
 
-    # STATE MACHINE - Use LoanStatus enum
+    # STATE MACHINE
     status = db.Column(db.String(20), default=LoanStatus.PENDING.value, nullable=False)
 
     # VOTING INTEGRITY - Frozen at creation
@@ -422,14 +758,14 @@ class LoanRequest(db.Model):
     required_approvals = db.Column(db.Integer, nullable=False)
 
     # Interest & Repayment Configuration (set at approval)
-    interest_rate = db.Column(db.Float, nullable=True)  # Annual %
+    interest_rate = db.Column(db.Float, nullable=True)
     loan_duration_months = db.Column(db.Integer, nullable=True)
-    repayment_type = db.Column(db.String(20), nullable=True)  # 'emi' or 'bullet'
+    repayment_type = db.Column(db.String(20), nullable=True)
 
     # Calculated values (set at approval)
     approved_amount = db.Column(db.Float, nullable=True)
     total_interest = db.Column(db.Float, nullable=True)
-    total_repayable = db.Column(db.Float, nullable=True)  # principal + interest
+    total_repayable = db.Column(db.Float, nullable=True)
     emi_amount = db.Column(db.Float, nullable=True)
 
     # Status timestamps
@@ -455,6 +791,7 @@ class LoanRequest(db.Model):
 
     last_updated_at = db.Column(db.DateTime, nullable=True)
     last_updated_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
     # Relationships
     approvals = db.relationship('LoanApproval', backref='loan_request', lazy='dynamic')
     repayments = db.relationship('LoanRepayment', backref='loan', lazy='dynamic')
@@ -466,9 +803,9 @@ class LoanRequest(db.Model):
     VALID_TRANSITIONS = {
         LoanStatus.PENDING.value: [LoanStatus.APPROVED.value, LoanStatus.REJECTED.value],
         LoanStatus.APPROVED.value: [LoanStatus.DISBURSED.value, LoanStatus.REJECTED.value],
-        LoanStatus.REJECTED.value: [],  # Terminal state
+        LoanStatus.REJECTED.value: [],
         LoanStatus.DISBURSED.value: [LoanStatus.COMPLETED.value],
-        LoanStatus.COMPLETED.value: [],  # Terminal state
+        LoanStatus.COMPLETED.value: [],
     }
 
     def can_transition_to(self, new_status):
@@ -489,7 +826,6 @@ class LoanRequest(db.Model):
         old_status = self.status
         self.status = new_status
 
-        # Set timestamps based on new status
         now = datetime.utcnow()
         if new_status == LoanStatus.APPROVED.value:
             self.approved_at = now
@@ -537,7 +873,6 @@ class LoanRequest(db.Model):
 class LoanApproval(db.Model):
     """
     Vote record for loan request.
-    Uses FROZEN total_eligible_voters from LoanRequest.
     """
     __tablename__ = 'loan_approvals'
 
@@ -558,12 +893,11 @@ class LoanApproval(db.Model):
 
 
 # ============================================================
-# EMI SCHEDULE MODEL (NEW!)
+# EMI SCHEDULE MODEL
 # ============================================================
 class EMISchedule(db.Model):
     """
     Pre-calculated EMI schedule for loans.
-    Generated when loan is approved with EMI repayment type.
     """
     __tablename__ = 'emi_schedules'
 
@@ -600,16 +934,11 @@ class EMISchedule(db.Model):
 
 
 # ============================================================
-# LOAN CONTRIBUTION SNAPSHOT (NEW!)
+# LOAN CONTRIBUTION SNAPSHOT
 # ============================================================
 class LoanContributionSnapshot(db.Model):
     """
     Snapshot of member contributions at loan approval time.
-
-    CRITICAL: This freezes contribution ratios for interest distribution.
-    - Taken when loan is APPROVED
-    - Excludes the borrower
-    - Used to calculate interest distribution throughout loan lifecycle
     """
     __tablename__ = 'loan_contribution_snapshots'
 
@@ -639,18 +968,14 @@ class LoanContributionSnapshot(db.Model):
 
     def __repr__(self):
         return f'<LoanContributionSnapshot loan={self.loan_id} user={self.user_id} {self.contribution_percentage:.1f}%>'
+
+
 # ============================================================
-# LOAN REPAYMENT MODEL (UPDATED)
+# LOAN REPAYMENT MODEL
 # ============================================================
 class LoanRepayment(db.Model):
     """
     Loan repayment with approval workflow.
-
-    WORKFLOW:
-    1. Borrower submits repayment → status = PENDING
-    2. Admin reviews
-    3. Admin approves/rejects
-    4. Only on APPROVAL: Wallet updated, interest distributed
     """
     __tablename__ = 'loan_repayments'
 
@@ -710,14 +1035,11 @@ class LoanRepayment(db.Model):
 
 
 # ============================================================
-# INTEREST DISTRIBUTION MODEL (NEW!)
+# INTEREST DISTRIBUTION MODEL
 # ============================================================
 class InterestDistribution(db.Model):
     """
     Tracks interest distribution to lenders when repayment is approved.
-
-    When interest is repaid, it's distributed proportionally to all
-    members who contributed to the wallet.
     """
     __tablename__ = 'interest_distributions'
 
@@ -729,9 +1051,9 @@ class InterestDistribution(db.Model):
     beneficiary_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     # Distribution details
-    contribution_amount = db.Column(db.Float, nullable=False)  # Their contribution at time
-    contribution_percentage = db.Column(db.Float, nullable=False)  # % of total pool
-    interest_earned = db.Column(db.Float, nullable=False)  # Amount received
+    contribution_amount = db.Column(db.Float, nullable=False)
+    contribution_percentage = db.Column(db.Float, nullable=False)
+    interest_earned = db.Column(db.Float, nullable=False)
 
     # Transaction reference
     transaction_id = db.Column(db.Integer, db.ForeignKey('wallet_transactions.id'), nullable=True)
@@ -746,14 +1068,11 @@ class InterestDistribution(db.Model):
 
 
 # ============================================================
-# ADMIN TRANSFER HISTORY MODEL (NEW!)
+# ADMIN TRANSFER HISTORY MODEL
 # ============================================================
 class AdminTransferHistory(db.Model):
     """
     Audit trail for admin role transfers.
-
-    Admin cannot leave group - must transfer first.
-    System ensures at least one admin exists.
     """
     __tablename__ = 'admin_transfer_history'
 
@@ -772,3 +1091,136 @@ class AdminTransferHistory(db.Model):
 
     def __repr__(self):
         return f'<AdminTransfer group={self.group_id} from={self.from_user_id} to={self.to_user_id}>'
+
+
+# ============================================================
+# SERVICE FUNCTIONS
+# ============================================================
+
+def get_member_dashboard(user_id):
+    """
+    Get comprehensive dashboard for a member across all groups.
+    """
+    ledgers = MemberLedger.query.filter_by(user_id=user_id).all()
+
+    dashboard = {
+        'user_id': user_id,
+        'total_across_all_groups': {
+            'principal_contributed': 0,
+            'principal_withdrawn': 0,
+            'net_principal': 0,
+            'interest_earned': 0,
+            'interest_withdrawn': 0,
+            'net_interest': 0,
+            'total_balance': 0
+        },
+        'group_wise_details': [],
+        'active_groups': [],
+        'inactive_groups': []
+    }
+
+    for ledger in ledgers:
+        group_info = ledger.get_dashboard_summary()
+        dashboard['group_wise_details'].append(group_info)
+
+        # Update totals
+        dashboard['total_across_all_groups']['principal_contributed'] += ledger.principal_contributed
+        dashboard['total_across_all_groups']['principal_withdrawn'] += ledger.principal_withdrawn
+        dashboard['total_across_all_groups']['net_principal'] += ledger.net_principal
+        dashboard['total_across_all_groups']['interest_earned'] += ledger.interest_earned
+        dashboard['total_across_all_groups']['interest_withdrawn'] += ledger.interest_withdrawn
+        dashboard['total_across_all_groups']['net_interest'] += ledger.net_interest
+        dashboard['total_across_all_groups']['total_balance'] += ledger.total_balance
+
+        # Categorize by active status
+        if group_info['is_active_member']:
+            dashboard['active_groups'].append(group_info)
+        else:
+            dashboard['inactive_groups'].append(group_info)
+
+    return dashboard
+
+
+def rejoin_group(user_id, group_id, contribution_amount=0):
+    """
+    Re-join a group after withdrawal.
+    """
+    # Check if already active member
+    existing = GroupMember.query.filter_by(
+        group_id=group_id,
+        user_id=user_id,
+        is_active=True
+    ).first()
+
+    if existing:
+        raise ValueError("User is already an active member of this group")
+
+    # Find inactive membership
+    inactive_membership = GroupMember.query.filter_by(
+        group_id=group_id,
+        user_id=user_id,
+        is_active=False
+    ).first()
+
+    if inactive_membership:
+        # Reactivate
+        inactive_membership.reactivate()
+    else:
+        # Create new membership
+        inactive_membership = GroupMember(
+            group_id=group_id,
+            user_id=user_id,
+            role='member'
+        )
+        db.session.add(inactive_membership)
+
+    # If contributing new money
+    if contribution_amount > 0:
+        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+
+        # Create contribution
+        contribution = MemberContribution(
+            wallet_id=wallet.id,
+            user_id=user_id,
+            amount=contribution_amount,
+            description="Re-joining contribution"
+        )
+        db.session.add(contribution)
+
+        # Update or create ledger
+        ledger = MemberLedger.query.filter_by(
+            wallet_id=wallet.id,
+            user_id=user_id
+        ).first()
+
+        if not ledger:
+            ledger = MemberLedger(
+                wallet_id=wallet.id,
+                user_id=user_id
+            )
+            db.session.add(ledger)
+
+        ledger.add_contribution(contribution_amount)
+
+        # Create wallet transaction
+        transaction = WalletTransaction(
+            wallet_id=wallet.id,
+            transaction_type=TransactionType.CONTRIBUTION.value,
+            amount=contribution_amount,
+            created_by=user_id,
+            reference_type='member_contribution',
+            reference_id=contribution.id,
+            description=f"Re-joining contribution by user {user_id}",
+            idempotency_key=WalletTransaction.generate_idempotency_key()
+        )
+        db.session.add(transaction)
+
+        # Mark wallet as dirty
+        wallet.mark_dirty()
+
+    # Update member's financial summary
+    summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
+    if summary:
+        summary.is_dirty = True
+
+    return inactive_membership

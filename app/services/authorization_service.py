@@ -2,15 +2,12 @@
 CENTRALIZED AUTHORIZATION SERVICE
 ==================================
 
-All permission checks live here.
-Routes and other services call these functions.
-
-NEVER bypass these checks!
+Updated for new withdrawal and member dashboard features.
 """
 
 from app.models import (
     User, Group, GroupMember, GroupWallet, LoanRequest, LoanRepayment,
-    MemberLedger, LoanStatus, RepaymentStatus, MemberRole
+    MemberLedger, LoanStatus, RepaymentStatus, MemberRole, WithdrawalRequest, WithdrawalStatus
 )
 from app.extensions import db
 
@@ -70,6 +67,91 @@ def can_contribute(user_id, wallet_id):
 
     if not is_group_member(user_id, wallet.group_id):
         return False, "You are not a member of this group"
+
+    return True, None
+
+
+# ============================================================
+# WITHDRAWAL AUTHORIZATION (NEW)
+# ============================================================
+
+def can_withdraw(user_id, group_id):
+    """
+    Check if user can withdraw from group.
+
+    Requirements:
+    - User must be active member
+    - User must have positive net principal balance
+    - No pending withdrawal requests
+    """
+    # Check membership
+    membership = get_membership(user_id, group_id)
+    if not membership:
+        return False, "You are not an active member of this group"
+
+    # Check wallet and ledger
+    wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+    if not wallet:
+        return False, "Group wallet not found"
+
+    ledger = MemberLedger.query.filter_by(
+        wallet_id=wallet.id,
+        user_id=user_id
+    ).first()
+
+    if not ledger or ledger.net_principal <= 0:
+        return False, "You have no withdrawable principal balance"
+
+    # Check for pending withdrawal requests
+    pending_withdrawals = WithdrawalRequest.query.filter_by(
+        user_id=user_id,
+        group_id=group_id,
+        status=WithdrawalStatus.PENDING.value
+    ).count()
+
+    if pending_withdrawals > 0:
+        return False, "You already have a pending withdrawal request"
+
+    return True, None
+
+
+def can_approve_withdrawal(user_id, withdrawal_id):
+    """
+    Check if user can approve a withdrawal request.
+
+    Requirements:
+    - User must be group admin
+    - Withdrawal must be in PENDING status
+    """
+    withdrawal = WithdrawalRequest.query.get(withdrawal_id)
+    if not withdrawal:
+        return False, "Withdrawal request not found"
+
+    if withdrawal.status != WithdrawalStatus.PENDING.value:
+        return False, f"Withdrawal is already {withdrawal.status}"
+
+    if not is_group_admin(user_id, withdrawal.group_id):
+        return False, "Only group admin can approve withdrawals"
+
+    # Check if group has sufficient balance
+    wallet = GroupWallet.query.filter_by(group_id=withdrawal.group_id).first()
+    if wallet.balance < withdrawal.total_amount:
+        return False, f"Insufficient group balance. Required: ₹{withdrawal.total_amount}, Available: ₹{wallet.balance}"
+
+    # Check if member still has sufficient balance
+    ledger = MemberLedger.query.filter_by(
+        wallet_id=wallet.id,
+        user_id=withdrawal.user_id
+    ).first()
+
+    if not ledger:
+        return False, "Member ledger not found"
+
+    if withdrawal.principal_amount > ledger.net_principal:
+        return False, f"Insufficient principal balance. Requested: ₹{withdrawal.principal_amount}, Available: ₹{ledger.net_principal}"
+
+    if withdrawal.interest_amount > ledger.net_interest:
+        return False, f"Insufficient interest balance. Requested: ₹{withdrawal.interest_amount}, Available: ₹{ledger.net_interest}"
 
     return True, None
 
@@ -209,7 +291,7 @@ def can_approve_repayment(user_id, repayment_id):
 
 
 # ============================================================
-# GROUP LEAVE AUTHORIZATION
+# GROUP LEAVE AUTHORIZATION (UPDATED)
 # ============================================================
 
 def can_leave_group(user_id, group_id):
@@ -220,10 +302,21 @@ def can_leave_group(user_id, group_id):
     - User must be active member
     - User must NOT have active/unpaid loans
     - If admin: must transfer admin rights first
+    - No pending withdrawal requests
     """
     membership = get_membership(user_id, group_id)
     if not membership:
         return False, "You are not a member of this group"
+
+    # Check for pending withdrawal requests
+    pending_withdrawals = WithdrawalRequest.query.filter_by(
+        user_id=user_id,
+        group_id=group_id,
+        status=WithdrawalStatus.PENDING.value
+    ).count()
+
+    if pending_withdrawals > 0:
+        return False, "You have pending withdrawal requests"
 
     # Check for active loans
     active_loans = LoanRequest.query.filter(
@@ -256,7 +349,7 @@ def can_leave_group(user_id, group_id):
     ).count()
 
     if pending_repayments > 0:
-        return False, f"You have {pending_repayments} pending repayment(s) awaiting approval."
+        return False, f"You have pending repayment(s) awaiting approval."
 
     # Check if admin
     if membership.role == MemberRole.ADMIN.value:
@@ -301,6 +394,38 @@ def can_transfer_admin(from_user_id, to_user_id, group_id):
         return False, "Target user is already an admin"
 
     return True, None
+
+
+# ============================================================
+# REJOIN GROUP AUTHORIZATION (NEW)
+# ============================================================
+
+def can_rejoin_group(user_id, group_id):
+    """
+    Check if user can rejoin group.
+
+    Requirements:
+    - User must have been a member before (inactive membership)
+    - No pending liabilities from previous membership
+    """
+    # Check if already active member
+    active_membership = get_membership(user_id, group_id)
+    if active_membership:
+        return False, "You are already an active member of this group"
+
+    # Check for inactive membership
+    inactive_membership = GroupMember.query.filter_by(
+        group_id=group_id,
+        user_id=user_id,
+        is_active=False
+    ).first()
+
+    if not inactive_membership:
+        return True, "No previous membership found (can join as new)"
+
+    # Check if there were any liabilities when they left
+    # (This would require additional tracking - simplified for now)
+    return True, "Can rejoin group"
 
 
 # ============================================================

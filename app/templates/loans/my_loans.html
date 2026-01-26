@@ -18,7 +18,7 @@
                class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                 <div>
                     <strong>{{ loan.requester.name }}</strong> requested
-                    <strong>₹{{ "%.0f"|format(loan.amount) }}</strong>
+                    <strong>₹{{ "{:,.0f}".format(loan.amount) }}</strong>
                     <br>
                     <small class="text-muted">{{ loan.group.name }}</small>
                 </div>
@@ -55,7 +55,7 @@
                             <strong>{{ loan.group.name }}</strong>
                         </td>
                         <td>
-                            <strong>₹{{ "%.0f"|format(loan.amount) }}</strong>
+                            <strong>₹{{ "{:,.0f}".format(loan.amount) }}</strong>
                         </td>
                         <td>
                             <span class="badge
@@ -67,34 +67,8 @@
                                 {% elif loan.status == 'completed' %}bg-dark
                                 {% else %}bg-secondary
                                 {% endif %}">
-                                {% if loan.status == 'pending' %}
-                                    Pending Votes
-                                {% elif loan.status == 'pre_approved' %}
-                                    Pre-Approved
-                                {% elif loan.status == 'approved' %}
-                                    Approved
-                                {% elif loan.status == 'rejected' %}
-                                    Rejected
-                                {% elif loan.status == 'disbursed' %}
-                                    Disbursed
-                                {% elif loan.status == 'completed' %}
-                                    Completed
-                                {% else %}
-                                    {{ loan.status|title }}
-                                {% endif %}
+                                {{ loan.status|replace('_', ' ')|title }}
                             </span>
-
-                            <!-- Auto-approved note for single admin case -->
-                            {% if loan.status == 'approved' %}
-                                {% set admin_count = loan.group.members.filter_by(role='admin', is_active=True).count() %}
-                                {% if loan.requested_by == loan.group.admin_id and admin_count == 1 %}
-                                <div class="mt-1">
-                                    <small class="text-success">
-                                        <i class="bi bi-info-circle"></i> Auto-approved (you are the only admin)
-                                    </small>
-                                </div>
-                                {% endif %}
-                            {% endif %}
                         </td>
                         <td>
                             {{ loan.created_at.strftime('%d %b %Y') }}
@@ -119,4 +93,30 @@
         {% endif %}
     </div>
 </div>
+
+<!-- Pending Repayments -->
+{% if my_pending_repayments %}
+<div class="card mt-4 border-info">
+    <div class="card-header bg-info text-white">
+        <i class="bi bi-clock-history"></i> Pending Repayment Approvals ({{ my_pending_repayments|length }})
+    </div>
+    <div class="card-body">
+        <div class="list-group list-group-flush">
+            {% for repayment in my_pending_repayments %}
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>₹{{ "{:,.0f}".format(repayment.amount) }}</strong>
+                        for Loan #{{ repayment.loan_id }}
+                        <br>
+                        <small class="text-muted">Submitted: {{ repayment.submitted_at.strftime('%d %b %Y') }}</small>
+                    </div>
+                    <span class="badge bg-info rounded-pill">Pending Admin Approval</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

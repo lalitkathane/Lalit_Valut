@@ -2,13 +2,7 @@
 WALLET SERVICE - ATOMIC FINANCIAL OPERATIONS
 =============================================
 
-CRITICAL BUSINESS RULES:
-1. Wallet balance ONLY changes via WalletTransaction
-2. All operations are ATOMIC (db transactions)
-3. Borrower is EXCLUDED from interest on their own loan
-4. Contribution snapshot taken at loan approval
-5. Borrower wallet is NOT auto-debited for repayment
-6. Wallet (contribution) and Loan (liability) are SEPARATE
+Updated for withdrawal support and member financial summaries.
 """
 
 from datetime import datetime
@@ -16,8 +10,12 @@ from app.extensions import db
 from app.models import (
     Group, GroupWallet, MemberContribution, WalletTransaction,
     LoanRequest, LoanRepayment, MemberLedger, GroupMember,
-    LoanContributionSnapshot, InterestDistribution,
-    LoanStatus, RepaymentStatus
+    LoanContributionSnapshot, InterestDistribution, MemberFinancialSummary,
+    LoanStatus, RepaymentStatus, TransactionType
+)
+from app.services.authorization_service import (
+    can_contribute, can_disburse, can_repay, can_approve_repayment,
+    AuthorizationError
 )
 import uuid
 
@@ -85,6 +83,7 @@ def create_wallet_for_group(group_id):
             total_contributed=0.0,
             total_disbursed=0.0,
             total_interest_earned=0.0,
+            total_withdrawn=0.0,
             is_dirty=False,
             last_recalculated_at=datetime.utcnow()
         )
@@ -115,13 +114,31 @@ def get_or_create_member_ledger(wallet_id, user_id):
             wallet_id=wallet_id,
             user_id=user_id,
             principal_contributed=0.0,
+            principal_withdrawn=0.0,
             interest_earned=0.0,
-            total_balance=0.0
+            interest_withdrawn=0.0,
+            total_principal_ever=0.0,
+            total_interest_ever=0.0
         )
         db.session.add(ledger)
         db.session.flush()
 
     return ledger
+
+
+# ============================================================
+# UPDATE MEMBER FINANCIAL SUMMARY
+# ============================================================
+
+def update_member_financial_summary(user_id):
+    """Mark member's financial summary as dirty for recalculation"""
+    summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
+    if summary:
+        summary.is_dirty = True
+    else:
+        # Create summary if it doesn't exist
+        summary = MemberFinancialSummary(user_id=user_id)
+        db.session.add(summary)
 
 
 # ============================================================
@@ -150,8 +167,7 @@ def contribute_to_wallet(wallet_id, user_id, amount, description=None, idempoten
         if not wallet:
             raise WalletError(f"Wallet {wallet_id} not found")
 
-        # Check membership
-        from app.services.authorization_service import can_contribute
+        # Check authorization
         allowed, reason = can_contribute(user_id, wallet_id)
         if not allowed:
             raise WalletError(reason)
@@ -167,10 +183,10 @@ def contribute_to_wallet(wallet_id, user_id, amount, description=None, idempoten
         # Create transaction (SOURCE OF TRUTH)
         transaction = WalletTransaction(
             wallet_id=wallet_id,
-            transaction_type='contribution',
+            transaction_type=TransactionType.CONTRIBUTION.value,
             amount=amount,
             balance_after=new_balance,
-            reference_type='contribution',
+            reference_type='member_contribution',
             created_by=user_id,
             description=description or f"Contribution by user {user_id}",
             idempotency_key=idempotency_key
@@ -194,9 +210,10 @@ def contribute_to_wallet(wallet_id, user_id, amount, description=None, idempoten
 
         # Update member ledger
         ledger = get_or_create_member_ledger(wallet_id, user_id)
-        ledger.principal_contributed += amount
-        ledger.total_balance += amount
-        ledger.last_contribution_at = datetime.utcnow()
+        ledger.add_contribution(amount)
+
+        # Update member's financial summary
+        update_member_financial_summary(user_id)
 
         # Update wallet cache
         wallet.balance = new_balance
@@ -208,7 +225,7 @@ def contribute_to_wallet(wallet_id, user_id, amount, description=None, idempoten
 
         return contribution, transaction
 
-    except (InvalidAmountError, DuplicateTransactionError, WalletError):
+    except (InvalidAmountError, DuplicateTransactionError, WalletError, AuthorizationError):
         db.session.rollback()
         raise
     except Exception as e:
@@ -292,10 +309,9 @@ def disburse_loan(loan_id, admin_user_id, idempotency_key=None):
             raise WalletError(f"Loan {loan_id} not found")
 
         # Check authorization
-        from app.services.authorization_service import can_disburse
         allowed, reason = can_disburse(admin_user_id, loan_id)
         if not allowed:
-            raise WalletError(reason)
+            raise AuthorizationError(reason)
 
         # Check idempotency
         existing = check_idempotency(idempotency_key)
@@ -324,7 +340,7 @@ def disburse_loan(loan_id, admin_user_id, idempotency_key=None):
         # Create transaction
         transaction = WalletTransaction(
             wallet_id=wallet.id,
-            transaction_type='loan_disbursement',
+            transaction_type=TransactionType.LOAN_DISBURSEMENT.value,
             amount=-disburse_amount,
             balance_after=new_balance,
             reference_type='loan',
@@ -351,7 +367,7 @@ def disburse_loan(loan_id, admin_user_id, idempotency_key=None):
 
         return transaction
 
-    except (WalletError, DuplicateTransactionError, InsufficientBalanceError):
+    except (WalletError, DuplicateTransactionError, InsufficientBalanceError, AuthorizationError):
         db.session.rollback()
         raise
     except Exception as e:
@@ -388,10 +404,9 @@ def submit_repayment(loan_id, user_id, amount, description=None, emi_schedule_id
             raise WalletError(f"Loan {loan_id} not found")
 
         # Check authorization
-        from app.services.authorization_service import can_repay
         allowed, reason = can_repay(user_id, loan_id)
         if not allowed:
-            raise WalletError(reason)
+            raise AuthorizationError(reason)
 
         # Limit to remaining amount
         remaining = loan.get_remaining_amount()
@@ -423,7 +438,7 @@ def submit_repayment(loan_id, user_id, amount, description=None, emi_schedule_id
 
         return repayment
 
-    except (InvalidAmountError, WalletError):
+    except (InvalidAmountError, WalletError, AuthorizationError):
         db.session.rollback()
         raise
     except Exception as e:
@@ -461,10 +476,9 @@ def approve_repayment(repayment_id, admin_user_id):
             raise WalletError(f"Repayment {repayment_id} not found")
 
         # Check authorization
-        from app.services.authorization_service import can_approve_repayment
         allowed, reason = can_approve_repayment(admin_user_id, repayment_id)
         if not allowed:
-            raise WalletError(reason)
+            raise AuthorizationError(reason)
 
         # Get loan and wallet
         loan = LoanRequest.query.get(repayment.loan_id)
@@ -485,7 +499,7 @@ def approve_repayment(repayment_id, admin_user_id):
         # Create wallet transaction
         transaction = WalletTransaction(
             wallet_id=wallet.id,
-            transaction_type='repayment',
+            transaction_type=TransactionType.REPAYMENT.value,
             amount=repayment.amount,
             balance_after=new_balance,
             reference_type='repayment',
@@ -541,7 +555,7 @@ def approve_repayment(repayment_id, admin_user_id):
 
         return repayment, transaction, interest_distributions
 
-    except WalletError:
+    except (WalletError, AuthorizationError):
         db.session.rollback()
         raise
     except Exception as e:
@@ -562,12 +576,6 @@ def distribute_interest_to_members(loan, repayment, wallet, interest_amount, adm
     2. EXCLUDE the borrower completely
     3. Interest split based on contribution percentage at approval
     4. Update each member's ledger with interest earned
-
-    Example:
-    - Loan by ABC, Interest = ₹120
-    - PQR contributed ₹5,000 (71.4%) → gets ₹85.68
-    - XYZ contributed ₹2,000 (28.6%) → gets ₹34.32
-    - ABC (borrower) → gets ₹0
     """
     distributions = []
 
@@ -599,16 +607,17 @@ def distribute_interest_to_members(loan, repayment, wallet, interest_amount, adm
 
         # Update member's ledger
         ledger = get_or_create_member_ledger(wallet.id, snapshot.user_id)
-        ledger.interest_earned += interest_share
-        ledger.total_balance += interest_share
-        ledger.last_interest_credit_at = datetime.utcnow()
+        ledger.add_interest(interest_share)
+
+        # Update member's financial summary
+        update_member_financial_summary(snapshot.user_id)
 
         # Create interest distribution transaction
         int_idempotency = f"interest_{repayment.id}_{snapshot.user_id}_{uuid.uuid4().hex[:8]}"
 
         int_txn = WalletTransaction(
             wallet_id=wallet.id,
-            transaction_type='interest_distribution',
+            transaction_type=TransactionType.INTEREST_DISTRIBUTION.value,
             amount=0,  # No wallet balance change (already in repayment)
             reference_type='interest_distribution',
             reference_id=distribution.id,
@@ -647,17 +656,22 @@ def recalculate_wallet_balance(wallet_id):
 
     contributions = sum(
         t.amount for t in transactions
-        if t.transaction_type == 'contribution'
+        if t.transaction_type == TransactionType.CONTRIBUTION.value
     )
 
     disbursements = sum(
         abs(t.amount) for t in transactions
-        if t.transaction_type == 'loan_disbursement'
+        if t.transaction_type == TransactionType.LOAN_DISBURSEMENT.value
+    )
+
+    withdrawals = sum(
+        abs(t.amount) for t in transactions
+        if t.transaction_type == TransactionType.WITHDRAWAL.value
     )
 
     repayments = sum(
         t.amount for t in transactions
-        if t.transaction_type == 'repayment'
+        if t.transaction_type == TransactionType.REPAYMENT.value
     )
 
     previous_balance = wallet.balance
@@ -668,6 +682,7 @@ def recalculate_wallet_balance(wallet_id):
         wallet.balance = calculated_balance
         wallet.total_contributed = contributions
         wallet.total_disbursed = disbursements
+        wallet.total_withdrawn = withdrawals
         was_corrected = True
 
     wallet.is_dirty = False
@@ -683,6 +698,7 @@ def recalculate_wallet_balance(wallet_id):
         'was_corrected': was_corrected,
         'total_contributed': contributions,
         'total_disbursed': disbursements,
+        'total_withdrawn': withdrawals,
         'total_repaid': repayments
     }
 
@@ -701,25 +717,46 @@ def get_wallet_summary(wallet_id):
         recalculate_wallet_balance(wallet_id)
         wallet = GroupWallet.query.get(wallet_id)
 
-    # Calculate total repaid
-    total_repaid = db.session.query(db.func.sum(WalletTransaction.amount)).filter(
+    # Calculate totals by transaction type
+    from sqlalchemy import func
+    from app.models import TransactionType as TType
+
+    # Using SQLAlchemy's case statements
+    from sqlalchemy import case
+
+    totals = db.session.query(
+        func.sum(case((WalletTransaction.transaction_type == TType.CONTRIBUTION.value, WalletTransaction.amount), else_=0)).label('total_contributions'),
+        func.sum(case((WalletTransaction.transaction_type == TType.LOAN_DISBURSEMENT.value, WalletTransaction.amount), else_=0)).label('total_disbursements'),
+        func.sum(case((WalletTransaction.transaction_type == TType.REPAYMENT.value, WalletTransaction.amount), else_=0)).label('total_repayments'),
+        func.sum(case((WalletTransaction.transaction_type == TType.WITHDRAWAL.value, WalletTransaction.amount), else_=0)).label('total_withdrawals')
+    ).filter(
         WalletTransaction.wallet_id == wallet_id,
-        WalletTransaction.transaction_type == 'repayment',
         WalletTransaction.is_reversed == False
-    ).scalar() or 0.0
+    ).first()
 
     # Transaction counts
-    contrib_count = WalletTransaction.query.filter_by(
-        wallet_id=wallet_id, transaction_type='contribution', is_reversed=False
-    ).count()
-
-    disburse_count = WalletTransaction.query.filter_by(
-        wallet_id=wallet_id, transaction_type='loan_disbursement', is_reversed=False
-    ).count()
-
-    repay_count = WalletTransaction.query.filter_by(
-        wallet_id=wallet_id, transaction_type='repayment', is_reversed=False
-    ).count()
+    transaction_counts = {
+        'contributions': WalletTransaction.query.filter_by(
+            wallet_id=wallet_id,
+            transaction_type=TType.CONTRIBUTION.value,
+            is_reversed=False
+        ).count(),
+        'disbursements': WalletTransaction.query.filter_by(
+            wallet_id=wallet_id,
+            transaction_type=TType.LOAN_DISBURSEMENT.value,
+            is_reversed=False
+        ).count(),
+        'repayments': WalletTransaction.query.filter_by(
+            wallet_id=wallet_id,
+            transaction_type=TType.REPAYMENT.value,
+            is_reversed=False
+        ).count(),
+        'withdrawals': WalletTransaction.query.filter_by(
+            wallet_id=wallet_id,
+            transaction_type=TType.WITHDRAWAL.value,
+            is_reversed=False
+        ).count()
+    }
 
     # Member ledgers
     member_ledgers = MemberLedger.query.filter_by(wallet_id=wallet_id).all()
@@ -729,27 +766,84 @@ def get_wallet_summary(wallet_id):
         'group_id': wallet.group_id,
         'group_name': wallet.group.name,
         'balance': wallet.balance,
-        'total_contributed': wallet.total_contributed,
-        'total_disbursed': wallet.total_disbursed,
-        'total_repaid': total_repaid,
+        'total_contributed': totals.total_contributions or 0,
+        'total_disbursed': abs(totals.total_disbursements or 0),
+        'total_repaid': totals.total_repayments or 0,
+        'total_withdrawn': abs(totals.total_withdrawals or 0),
         'total_interest_earned': wallet.total_interest_earned,
         'is_dirty': wallet.is_dirty,
         'last_recalculated_at': wallet.last_recalculated_at,
-        'transaction_counts': {
-            'contributions': contrib_count,
-            'disbursements': disburse_count,
-            'repayments': repay_count,
-            'total': contrib_count + disburse_count + repay_count
-        },
+        'transaction_counts': transaction_counts,
         'member_ledgers': [
             {
                 'user_id': l.user_id,
                 'user_name': l.member.name,
                 'principal_contributed': l.principal_contributed,
+                'principal_withdrawn': l.principal_withdrawn,
+                'net_principal': l.net_principal,
                 'interest_earned': l.interest_earned,
-                'total_balance': l.total_balance
+                'interest_withdrawn': l.interest_withdrawn,
+                'net_interest': l.net_interest,
+                'total_balance': l.total_balance,
+                'total_principal_ever': l.total_principal_ever,
+                'total_interest_ever': l.total_interest_ever,
+                'is_active_member': wallet.group.members.filter_by(
+                    user_id=l.user_id,
+                    is_active=True
+                ).first() is not None
             }
             for l in member_ledgers
+        ]
+    }
+
+
+# ============================================================
+# GET MEMBER'S PERSONAL WALLET SUMMARY
+# ============================================================
+
+def get_member_wallet_summary(wallet_id, user_id):
+    """Get wallet summary for a specific member"""
+    wallet = GroupWallet.query.get(wallet_id)
+    if not wallet:
+        raise WalletError(f"Wallet {wallet_id} not found")
+
+    ledger = MemberLedger.query.filter_by(
+        wallet_id=wallet_id,
+        user_id=user_id
+    ).first()
+
+    if not ledger:
+        return {
+            'has_ledger': False,
+            'wallet_balance': wallet.balance,
+            'group_name': wallet.group.name
+        }
+
+    # Get member's transactions
+    transactions = WalletTransaction.query.filter(
+        WalletTransaction.wallet_id == wallet_id,
+        WalletTransaction.is_reversed == False
+    ).filter(
+        (WalletTransaction.created_by == user_id) |
+        (WalletTransaction.beneficiary_id == user_id)
+    ).order_by(WalletTransaction.created_at.desc()).limit(10).all()
+
+    return {
+        'has_ledger': True,
+        'group_id': wallet.group_id,
+        'group_name': wallet.group.name,
+        'wallet_balance': wallet.balance,
+        'member_summary': ledger.get_dashboard_summary(),
+        'recent_transactions': [
+            {
+                'id': t.id,
+                'type': t.transaction_type,
+                'amount': t.amount,
+                'description': t.description,
+                'created_at': t.created_at,
+                'is_inflow': t.amount > 0
+            }
+            for t in transactions
         ]
     }
 
