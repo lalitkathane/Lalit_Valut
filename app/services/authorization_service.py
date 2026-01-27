@@ -96,7 +96,8 @@ def can_withdraw(user_id, group_id):
 
     ledger = MemberLedger.query.filter_by(
         wallet_id=wallet.id,
-        user_id=user_id
+        user_id=user_id,
+        is_active=True
     ).first()
 
     if not ledger or ledger.net_principal <= 0:

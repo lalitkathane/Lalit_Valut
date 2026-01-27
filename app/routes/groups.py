@@ -18,7 +18,7 @@ from app.models import Group, GroupMember, User, MemberRole, LoanRequest, LoanSt
 from app.services.wallet_service import create_wallet_for_group
 from app.services.membership_service import (
     add_member, leave_group, remove_member, transfer_admin,
-    get_member_liabilities, MembershipError
+    get_member_liabilities, MembershipError, rejoin_group
 )
 from app.services.authorization_service import (
     is_group_admin, is_group_member, AuthorizationError, can_rejoin_group, can_leave_group
@@ -207,78 +207,26 @@ def add_member_route(group_id):
 
 
 # ============== REMOVE MEMBER ==============
+# In groups.py, update the remove_member_route:
+# In groups.py, update the remove_member_route:
 @groups_bp.route('/groups/<int:group_id>/remove-member/<int:user_id>', methods=['POST'])
 @login_required
 def remove_member_route(group_id, user_id):
     try:
-        remove_member(group_id, user_id, current_user.id)
-        flash('Member removed!', 'success')
+        # The function now returns (success, message) tuple
+        success, message = remove_member(
+            group_id=group_id,
+            user_id=user_id,
+            admin_user_id=current_user.id,
+            reason="Removed by admin"
+        )
+        flash(message, 'success')
     except (MembershipError, AuthorizationError) as e:
         flash(str(e), 'danger')
+    except Exception as e:
+        flash(f'Error removing member: {str(e)}', 'danger')
 
     return redirect(url_for('groups.view_group', group_id=group_id))
-
-
-# # ============== LEAVE GROUP ==============
-# def leave_group(group_id, user_id, reason=None):
-#     """Member leaves group - archives their ledger"""
-#     try:
-#         # Check authorization
-#         allowed, error_reason = can_leave_group(user_id, group_id)
-#         if not allowed:
-#             raise AuthorizationError(error_reason)
-#
-#         membership = GroupMember.query.filter_by(
-#             group_id=group_id,
-#             user_id=user_id,
-#             is_active=True
-#         ).first()
-#
-#         if not membership:
-#             raise MembershipError("You are not a member of this group")
-#
-#         wallet = GroupWallet.query.filter_by(group_id=group_id).first()
-#         if not wallet:
-#             raise MembershipError("Group wallet not found")
-#
-#         ledger = MemberLedger.query.filter_by(
-#             wallet_id=wallet.id,
-#             user_id=user_id,
-#             is_active=True  # Only active ledger
-#         ).first()
-#
-#         # Check if member has contributions to withdraw
-#         if ledger and ledger.net_principal > 0:
-#             raise MembershipError(
-#                 f"You must withdraw your contributions (₹{ledger.net_principal:.2f}) before leaving the group."
-#             )
-#
-#         # ARCHIVE THE LEDGER WHEN LEAVING
-#         if ledger:
-#             ledger.is_active = False
-#
-#         # Soft delete membership
-#         membership.soft_delete(reason=reason or "Member left voluntarily")
-#
-#         # Mark financial summary as dirty
-#         summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
-#         if summary:
-#             summary.is_dirty = True
-#
-#         db.session.commit()
-#         return True
-#
-#     except (AuthorizationError, MembershipError):
-#         db.session.rollback()
-#         raise
-#     except Exception as e:
-#         db.session.rollback()
-#         raise MembershipError(f"Failed to leave group: {str(e)}")
-# ============== LEAVE GROUP ==============
-# REMOVE OR COMMENT OUT THIS FUNCTION - IT'S NOT A ROUTE
-# def leave_group(group_id, user_id, reason=None):
-#     """Member leaves group - archives their ledger"""
-#     # ... function body ...
 
 # ============== LEAVE GROUP ROUTE ==============
 @groups_bp.route('/groups/<int:group_id>/leave', methods=['GET', 'POST'])

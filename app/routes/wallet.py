@@ -105,6 +105,7 @@ def view_wallet(group_id):
     )
 
 # ============== MAKE CONTRIBUTION ==============
+# ============== MAKE CONTRIBUTION ==============
 @wallet_bp.route('/groups/<int:group_id>/wallet/contribute', methods=['GET', 'POST'])
 @login_required
 def contribute(group_id):
@@ -132,7 +133,8 @@ def contribute(group_id):
             amount = float(request.form.get('amount', 0))
             description = request.form.get('description', '')
 
-            contribution, transaction = contribute_to_wallet(
+            # FIX: Only expecting a MemberContribution object, not a tuple
+            contribution = contribute_to_wallet(
                 wallet_id=wallet.id,
                 user_id=current_user.id,
                 amount=amount,
@@ -157,7 +159,6 @@ def contribute(group_id):
         wallet=wallet,
         user_ledger=user_ledger
     )
-
 
 # ============== DISBURSE LOAN (Admin) ==============
 @wallet_bp.route('/loans/<int:loan_id>/disburse', methods=['POST'])

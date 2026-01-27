@@ -4,13 +4,13 @@ MEMBERSHIP SERVICE
 
 Updated for withdrawal support and member dashboard.
 """
-
+import uuid
 from datetime import datetime
 from app.extensions import db
 from app.models import (
     Group, GroupMember, AdminTransferHistory, WithdrawalRequest,
     MemberRole, LoanRequest, LoanStatus, MemberLedger, MemberFinancialSummary,
-    WithdrawalStatus, GroupWallet
+    WithdrawalStatus, GroupWallet, WalletTransaction, TransactionType
 )
 from app.services.authorization_service import (
     can_leave_group, can_transfer_admin,
@@ -76,121 +76,6 @@ def add_member(group_id, user_id, added_by_user_id, role=MemberRole.MEMBER.value
         db.session.rollback()
         raise MembershipError(f"Failed to add member: {str(e)}")
 
-
-# ============================================================
-# LEAVE GROUP (UPDATED)
-# ============================================================
-
-def leave_group(group_id, user_id, reason=None):
-    """
-    Member leaves group.
-
-    STRICT RULES:
-    - Cannot leave with active/unpaid loans
-    - Admin must transfer rights first
-    - MUST withdraw all contributions before leaving
-    - No pending withdrawal requests
-    """
-    try:
-        # Check authorization (includes liability check)
-        allowed, error_reason = can_leave_group(user_id, group_id)
-        if not allowed:
-            raise AuthorizationError(error_reason)
-
-        # Get membership
-        membership = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=user_id,
-            is_active=True
-        ).first()
-
-        if not membership:
-            raise MembershipError("You are not a member of this group")
-
-        # Get wallet and ledger
-        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
-        if not wallet:
-            raise MembershipError("Group wallet not found")
-
-        ledger = MemberLedger.query.filter_by(
-            wallet_id=wallet.id,
-            user_id=user_id
-        ).first()
-
-        # Check if member has contributions to withdraw
-        if ledger and ledger.net_principal > 0:
-            raise MembershipError(
-                f"You must withdraw your contributions (₹{ledger.net_principal:.2f}) before leaving the group. "
-                f"Please create a withdrawal request first."
-            )
-
-        # Soft delete
-        membership.soft_delete(reason=reason or "Member left voluntarily")
-
-        # Mark member's financial summary as dirty
-        summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
-        if summary:
-            summary.is_dirty = True
-
-        db.session.commit()
-
-        return True
-
-    except (AuthorizationError, MembershipError):
-        db.session.rollback()
-        raise
-    except Exception as e:
-        db.session.rollback()
-        raise MembershipError(f"Failed to leave group: {str(e)}")
-
-# ============================================================
-# REMOVE MEMBER (Admin action)
-# ============================================================
-
-def remove_member(group_id, user_id, removed_by_user_id, reason=None):
-    """Admin removes a member from group"""
-    try:
-        # Check if remover is admin
-        if not is_group_admin(removed_by_user_id, group_id):
-            raise AuthorizationError("Only admin can remove members")
-
-        # Cannot remove self
-        if user_id == removed_by_user_id:
-            raise MembershipError("Use 'leave group' to remove yourself")
-
-        # Check if target has liabilities
-        allowed, error_reason = can_leave_group(user_id, group_id)
-        if not allowed:
-            raise MembershipError(f"Cannot remove: {error_reason}")
-
-        # Get membership
-        membership = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=user_id,
-            is_active=True
-        ).first()
-
-        if not membership:
-            raise MembershipError("User is not a member")
-
-        # Soft delete
-        membership.soft_delete(reason=reason or f"Removed by admin {removed_by_user_id}")
-
-        # Mark member's financial summary as dirty
-        summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
-        if summary:
-            summary.is_dirty = True
-
-        db.session.commit()
-
-        return True
-
-    except (AuthorizationError, MembershipError):
-        db.session.rollback()
-        raise
-    except Exception as e:
-        db.session.rollback()
-        raise MembershipError(f"Failed to remove member: {str(e)}")
 
 
 # ============================================================
@@ -337,22 +222,378 @@ def get_member_liabilities(user_id, group_id):
 
     return liabilities
 
+# -----------------
 
 # ============================================================
-# GET MEMBER FINANCIAL SUMMARY (NEW)
+# LEAVE GROUP (CORRECTED)
+# ============================================================
+
+def leave_group(group_id, user_id, reason=None):
+    """
+    Member leaves group.
+    Archives their ledger when they leave.
+    """
+    try:
+        # Check authorization (includes liability check)
+        allowed, error_reason = can_leave_group(user_id, group_id)
+        if not allowed:
+            raise AuthorizationError(error_reason)
+
+        # Get membership
+        membership = GroupMember.query.filter_by(
+            group_id=group_id,
+            user_id=user_id,
+            is_active=True
+        ).first()
+
+        if not membership:
+            raise MembershipError("You are not a member of this group")
+
+        # Get wallet and ledger
+        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+        if not wallet:
+            raise MembershipError("Group wallet not found")
+
+        # Get ACTIVE ledger only
+        ledger = MemberLedger.query.filter_by(
+            wallet_id=wallet.id,
+            user_id=user_id,
+            is_active=True
+        ).first()
+
+        # Check if member has contributions to withdraw
+        if ledger and ledger.net_principal > 0:
+            raise MembershipError(
+                f"You must withdraw your contributions (₹{ledger.net_principal:.2f}) before leaving the group. "
+                f"Please create a withdrawal request first."
+            )
+
+        # ARCHIVE THE LEDGER
+        if ledger:
+            ledger.archive()  # Set is_active=False
+
+        # Soft delete membership
+        membership.soft_delete(reason=reason or "Member left voluntarily")
+
+        # Mark member's financial summary as dirty
+        summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
+        if summary:
+            summary.is_dirty = True
+
+        db.session.commit()
+        return True
+
+    except (AuthorizationError, MembershipError):
+        db.session.rollback()
+        raise
+    except Exception as e:
+        db.session.rollback()
+        raise MembershipError(f"Failed to leave group: {str(e)}")
+
+
+# ============================================================
+# REMOVE MEMBER (CORRECTED)
+# ============================================================
+# ============================================================
+# REMOVE MEMBER (CORRECTED WITH LOAN CHECKS)
+# ============================================================
+
+def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
+    """
+    Admin removes a member from group.
+    Checks for active loans before allowing removal.
+    Automatically processes withdrawal of member's principal balance.
+    Archives the member's ledger after withdrawal.
+    """
+    try:
+        # Check if admin has permission
+        if not is_group_admin(admin_user_id, group_id):
+            raise AuthorizationError("Only admin can remove members")
+
+        # Check if member exists and is active
+        membership = GroupMember.query.filter_by(
+            group_id=group_id,
+            user_id=user_id,
+            is_active=True
+        ).first()
+
+        if not membership:
+            raise MembershipError("Member not found or already inactive")
+
+        # Check if admin is trying to remove themselves
+        if user_id == admin_user_id:
+            raise AuthorizationError("Cannot remove yourself as admin. Use 'Leave Group' instead.")
+
+        # ========== CHECK FOR ACTIVE LOANS (SAME AS LEAVE_GROUP) ==========
+        from app.models import LoanRepayment, RepaymentStatus
+
+        # Check pending loan requests
+        pending_loans = LoanRequest.query.filter_by(
+            group_id=group_id,
+            requested_by=user_id,
+            status=LoanStatus.PENDING.value,
+            is_active=True
+        ).all()
+
+        if pending_loans:
+            loan_ids = ', '.join(str(l.id) for l in pending_loans)
+            raise MembershipError(f"Cannot remove member - they have pending loan requests (IDs: {loan_ids})")
+
+        # Check approved/disbursed loans
+        active_loans = LoanRequest.query.filter(
+            LoanRequest.group_id == group_id,
+            LoanRequest.requested_by == user_id,
+            LoanRequest.is_active == True,
+            LoanRequest.status.in_([
+                LoanStatus.APPROVED.value,
+                LoanStatus.DISBURSED.value
+            ])
+        ).all()
+
+        for loan in active_loans:
+            remaining = loan.get_remaining_amount()
+            if remaining > 0:
+                raise MembershipError(
+                    f"Cannot remove member - they have an outstanding loan (₹{remaining:.2f} remaining). "
+                    f"Loan ID: {loan.id}"
+                )
+
+        # Check pending repayments
+        pending_repayments = LoanRepayment.query.join(LoanRequest).filter(
+            LoanRequest.group_id == group_id,
+            LoanRepayment.paid_by == user_id,
+            LoanRepayment.status == RepaymentStatus.PENDING.value
+        ).all()
+
+        if pending_repayments:
+            repayment_ids = ', '.join(str(r.id) for r in pending_repayments)
+            raise MembershipError(f"Cannot remove member - they have pending repayments (IDs: {repayment_ids})")
+
+        # ========== CHECK FOR PENDING WITHDRAWAL REQUESTS ==========
+        pending_withdrawals = WithdrawalRequest.query.filter_by(
+            user_id=user_id,
+            group_id=group_id,
+            status=WithdrawalStatus.PENDING.value
+        ).all()
+
+        if pending_withdrawals:
+            withdrawal_ids = ', '.join(str(w.id) for w in pending_withdrawals)
+            raise MembershipError(
+                f"Cannot remove member - they have pending withdrawal requests (IDs: {withdrawal_ids})")
+        # ========== END OF LOAN/WITHDRAWAL CHECKS ==========
+
+        # Get wallet
+        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+        if not wallet:
+            raise MembershipError("Group wallet not found")
+
+        # Get member's ACTIVE ledger
+        ledger = MemberLedger.query.filter_by(
+            wallet_id=wallet.id,
+            user_id=user_id,
+            is_active=True  # Only active ledger
+        ).first()
+
+        # Store member's principal balance for withdrawal
+        principal_amount = 0
+        if ledger:
+            principal_amount = ledger.net_principal
+
+        # If member has principal balance, process withdrawal
+        if principal_amount > 0:
+            # Create withdrawal request
+            withdrawal = WithdrawalRequest(
+                user_id=user_id,
+                group_id=group_id,
+                withdrawal_type='principal_only',
+                principal_amount=principal_amount,
+                interest_amount=0.0,
+                total_amount=principal_amount,
+                status='approved',  # Auto-approve since admin is removing
+                approved_by=admin_user_id,
+                approved_at=datetime.utcnow(),
+                membership_action='deactivate',
+                new_membership_status=False,
+                idempotency_key=str(uuid.uuid4())
+            )
+            db.session.add(withdrawal)
+            db.session.flush()
+
+            # Process the withdrawal immediately
+            # 1. Create WalletTransaction
+            transaction = WalletTransaction(
+                wallet_id=wallet.id,
+                transaction_type=TransactionType.WITHDRAWAL.value,
+                amount=-principal_amount,
+                created_by=user_id,
+                reference_type='withdrawal_request',
+                reference_id=withdrawal.id,
+                description=f"Withdrawal by user {user_id} (admin removal)",
+                idempotency_key=WalletTransaction.generate_idempotency_key()
+            )
+            db.session.add(transaction)
+
+            # 2. Update MemberLedger
+            if ledger:
+                ledger.withdraw(principal_amount=principal_amount, interest_amount=0)
+
+            # 3. Update withdrawal record
+            withdrawal.status = 'processed'
+            withdrawal.processed_at = datetime.utcnow()
+            withdrawal.transaction_id = transaction.id
+
+            # 4. ARCHIVE THE LEDGER AFTER WITHDRAWAL
+            if ledger:
+                ledger.archive()
+
+            flash_message = f"Member removed and withdrawal of ₹{principal_amount:.2f} processed."
+        else:
+            # Just deactivate membership if no balance
+            # ARCHIVE LEDGER if exists
+            if ledger:
+                ledger.archive()
+            flash_message = "Member removed successfully."
+
+        # Soft delete membership
+        membership.soft_delete(reason=reason)
+
+        # Mark member's financial summary as dirty
+        summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
+        if summary:
+            summary.is_dirty = True
+
+        # Mark group wallet as dirty
+        wallet.mark_dirty()
+
+        # Commit all changes
+        db.session.commit()
+        return True, flash_message
+
+    except (AuthorizationError, MembershipError):
+        db.session.rollback()
+        raise
+    except Exception as e:
+        db.session.rollback()
+        raise MembershipError(f"Failed to remove member: {str(e)}")
+
+# ============================================================
+# REJOIN GROUP (CORRECTED - CREATES NEW LEDGER)
+# ============================================================
+def rejoin_group(user_id, group_id, contribution_amount=0):
+    """
+    Re-join a group after withdrawal.
+    Resets the existing ledger for fresh start (keeps same record, resets values).
+    """
+    try:
+        # Check if already active member
+        existing = GroupMember.query.filter_by(
+            group_id=group_id,
+            user_id=user_id,
+            is_active=True
+        ).first()
+
+        if existing:
+            raise MembershipError("User is already an active member of this group")
+
+        # Find inactive membership
+        inactive_membership = GroupMember.query.filter_by(
+            group_id=group_id,
+            user_id=user_id,
+            is_active=False
+        ).first()
+
+        if inactive_membership:
+            # Reactivate
+            inactive_membership.reactivate()
+            membership = inactive_membership
+        else:
+            # Create new membership
+            membership = GroupMember(
+                group_id=group_id,
+                user_id=user_id,
+                role='member'
+            )
+            db.session.add(membership)
+
+        # Get wallet
+        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+        if not wallet:
+            raise MembershipError("Group wallet not found")
+
+        # Find existing ledger (active or inactive)
+        ledger = MemberLedger.query.filter_by(
+            wallet_id=wallet.id,
+            user_id=user_id
+        ).first()
+
+        if ledger:
+            # RESET THE EXISTING LEDGER for fresh start
+            ledger.principal_contributed = 0
+            ledger.principal_withdrawn = 0
+            ledger.interest_earned = 0
+            ledger.interest_withdrawn = 0
+            ledger.total_principal_ever = 0  # RESET historical totals
+            ledger.total_interest_ever = 0   # RESET historical totals
+            ledger.last_contribution_at = None
+            ledger.last_withdrawal_at = None
+            ledger.last_interest_credit_at = None
+            ledger.is_active = True  # Mark as active again
+        else:
+            # Create new ledger if doesn't exist
+            ledger = MemberLedger(
+                wallet_id=wallet.id,
+                user_id=user_id,
+                principal_contributed=0,
+                principal_withdrawn=0,
+                interest_earned=0,
+                interest_withdrawn=0,
+                total_principal_ever=0,
+                total_interest_ever=0,
+                is_active=True
+            )
+            db.session.add(ledger)
+
+        # If contributing new money
+        if contribution_amount > 0:
+            from app.services.wallet_service import contribute_to_wallet
+
+            # Make contribution (this will update the reset ledger)
+            contribute_to_wallet(
+                wallet_id=wallet.id,
+                user_id=user_id,
+                amount=contribution_amount,
+                description="Re-joining contribution"
+            )
+
+        # Update member's financial summary
+        summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
+        if summary:
+            summary.is_dirty = True
+
+        db.session.commit()
+        return membership
+
+    except Exception as e:
+        db.session.rollback()
+        raise MembershipError(f"Failed to rejoin group: {str(e)}")
+# ============================================================
+# GET MEMBER GROUP FINANCIAL SUMMARY (UPDATED)
 # ============================================================
 
 def get_member_group_financial_summary(user_id, group_id):
     """
     Get member's financial summary for a specific group.
+    Returns ACTIVE ledger only.
     """
     wallet = GroupWallet.query.filter_by(group_id=group_id).first()
     if not wallet:
         return {"error": "Group wallet not found"}
 
+    # Get ACTIVE ledger only
     ledger = MemberLedger.query.filter_by(
         wallet_id=wallet.id,
-        user_id=user_id
+        user_id=user_id,
+        is_active=True
     ).first()
 
     if not ledger:
@@ -379,6 +620,7 @@ def get_member_group_financial_summary(user_id, group_id):
 
     return {
         'has_ledger': True,
+        'ledger_is_active': ledger.is_active,
         'is_active_member': membership is not None,
         'membership_role': membership.role if membership else None,
         'ledger_summary': ledger.get_dashboard_summary(),
@@ -396,104 +638,3 @@ def get_member_group_financial_summary(user_id, group_id):
             for w in withdrawals
         ]
     }
-
-
-# ============================================================
-# REJOIN GROUP (NEW)
-# ============================================================
-
-def rejoin_group(user_id, group_id, contribution_amount=0):
-    """
-    Re-join a group after withdrawal.
-    Creates a fresh MemberLedger for the new membership period.
-    """
-    # Check if already active member
-    existing = GroupMember.query.filter_by(
-        group_id=group_id,
-        user_id=user_id,
-        is_active=True
-    ).first()
-
-    if existing:
-        raise MembershipError("User is already an active member of this group")
-
-    # Find inactive membership
-    inactive_membership = GroupMember.query.filter_by(
-        group_id=group_id,
-        user_id=user_id,
-        is_active=False
-    ).first()
-
-    if inactive_membership:
-        # Reactivate
-        inactive_membership.reactivate()
-        membership = inactive_membership
-    else:
-        # Create new membership
-        membership = GroupMember(
-            group_id=group_id,
-            user_id=user_id,
-            role='member'
-        )
-        db.session.add(membership)
-
-    # Get wallet
-    wallet = GroupWallet.query.filter_by(group_id=group_id).first()
-    if not wallet:
-        raise MembershipError("Group wallet not found")
-
-    # ARCHIVE any existing active ledger (from previous membership)
-    old_ledger = MemberLedger.query.filter_by(
-        wallet_id=wallet.id,
-        user_id=user_id
-    ).first()
-
-    if old_ledger:
-        # Reset ledger for fresh start (or mark as archived)
-        old_ledger.principal_contributed = 0
-        old_ledger.principal_withdrawn = 0
-        old_ledger.interest_earned = 0
-        old_ledger.interest_withdrawn = 0
-        old_ledger.last_contribution_at = None
-        old_ledger.last_withdrawal_at = None
-        old_ledger.last_interest_credit_at = None
-
-    # If contributing new money
-    if contribution_amount > 0:
-        from app.services.wallet_service import contribute_to_wallet
-
-        # Make contribution (this will create/update ledger)
-        contribute_to_wallet(
-            wallet_id=wallet.id,
-            user_id=user_id,
-            amount=contribution_amount,
-            description="Re-joining contribution"
-        )
-    else:
-        # Ensure there's a ledger with zero balance
-        ledger = MemberLedger.query.filter_by(
-            wallet_id=wallet.id,
-            user_id=user_id
-        ).first()
-
-        if not ledger:
-            # Create fresh zero-balance ledger
-            ledger = MemberLedger(
-                wallet_id=wallet.id,
-                user_id=user_id,
-                principal_contributed=0,
-                principal_withdrawn=0,
-                interest_earned=0,
-                interest_withdrawn=0,
-                total_principal_ever=0,
-                total_interest_ever=0
-            )
-            db.session.add(ledger)
-
-    # Update member's financial summary
-    summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
-    if summary:
-        summary.is_dirty = True
-
-    db.session.commit()
-    return membership

@@ -481,9 +481,14 @@ class MemberLedger(db.Model):
     )
 
     def add_contribution(self, amount):
-        """Add a contribution"""
-        self.principal_contributed += amount
-        self.total_principal_ever += amount
+            # Ensure fields are initialized
+        if self.principal_contributed is None:
+            self.principal_contributed = 0.0
+        if self.total_principal_ever is None:
+            self.total_principal_ever = 0.0
+
+        self.principal_contributed += float(amount)
+        self.total_principal_ever += float(amount)
         self.last_contribution_at = datetime.utcnow()
 
     def add_interest(self, amount):
@@ -506,6 +511,10 @@ class MemberLedger(db.Model):
 
         self.last_withdrawal_at = datetime.utcnow()
 
+    # Add this method:
+    def archive(self):
+        """Archive this ledger (mark as inactive)"""
+        self.is_active = False
     def get_dashboard_summary(self):
         """Get summary for member dashboard"""
         group = self.wallet.group
@@ -524,7 +533,7 @@ class MemberLedger(db.Model):
             'is_active_member': group.members.filter_by(
                 user_id=self.user_id,
                 is_active=True
-            ).first() is not None
+            ).first() is not None,'ledger_is_active': self.is_active  # Add this
         }
 
     def __repr__(self):
@@ -622,6 +631,7 @@ class WithdrawalRequest(db.Model):
         self.approved_at = datetime.utcnow()
         self.rejection_reason = reason
 
+    # In WithdrawalRequest model:
     def process_withdrawal(self):
         """Process the withdrawal - update all related records"""
         if self.status != WithdrawalStatus.APPROVED.value:
@@ -640,10 +650,11 @@ class WithdrawalRequest(db.Model):
         )
         db.session.add(transaction)
 
-        # 2. Update MemberLedger
+        # 2. Update MemberLedger (ACTIVE ledger only)
         member_ledger = MemberLedger.query.filter_by(
             wallet_id=self.group.wallet.id,
-            user_id=self.user_id
+            user_id=self.user_id,
+            is_active=True  # Only active ledger
         ).first()
 
         if member_ledger:
@@ -652,7 +663,11 @@ class WithdrawalRequest(db.Model):
                 interest_amount=self.interest_amount
             )
 
-        # 3. Update membership if deactivating
+            # 3. ARCHIVE LEDGER if member is leaving the group
+            if self.membership_action == 'deactivate':
+                member_ledger.archive()  # Set is_active=False
+
+        # 4. Update membership if deactivating
         if self.membership_action == 'deactivate':
             membership = GroupMember.query.filter_by(
                 group_id=self.group_id,
@@ -662,10 +677,10 @@ class WithdrawalRequest(db.Model):
             if membership:
                 membership.soft_delete(reason="Withdrew from group")
 
-        # 4. Mark GroupWallet as dirty
+        # 5. Mark GroupWallet as dirty
         self.group.wallet.mark_dirty()
 
-        # 5. Mark member's financial summary as dirty
+        # 6. Mark member's financial summary as dirty
         summary = MemberFinancialSummary.query.filter_by(user_id=self.user_id).first()
         if summary:
             summary.is_dirty = True

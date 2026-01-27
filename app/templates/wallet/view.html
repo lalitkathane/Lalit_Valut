@@ -125,10 +125,10 @@
             {% for withdrawal in pending_withdrawals %}
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <div>
-                    <span class="fw-medium">{{ withdrawal.withdrawal_user.name }}</span>
+                    <span class="fw-medium">{{ withdrawal.user.name }}</span>
                     <span class="text-muted">• ₹{{ "%.2f"|format(withdrawal.total_amount) }}</span>
                 </div>
-                <a href="{{ url_for('withdrawal.view_withdrawal', withdrawal_id=withdrawal.id) }}"
+                <a href="{{ url_for('admin.withdrawal_detail', withdrawal_id=withdrawal.id) }}"
                    class="btn btn-sm btn-outline-primary">
                     Review
                 </a>

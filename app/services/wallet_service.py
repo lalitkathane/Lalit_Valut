@@ -118,13 +118,13 @@ def get_or_create_member_ledger(wallet_id, user_id):
             interest_earned=0.0,
             interest_withdrawn=0.0,
             total_principal_ever=0.0,
-            total_interest_ever=0.0
+            total_interest_ever=0.0,
+            is_active=True  # Add this
         )
         db.session.add(ledger)
         db.session.flush()
 
     return ledger
-
 
 # ============================================================
 # UPDATE MEMBER FINANCIAL SUMMARY
@@ -144,95 +144,95 @@ def update_member_financial_summary(user_id):
 # ============================================================
 # CONTRIBUTION (ATOMIC)
 # ============================================================
-
-def contribute_to_wallet(wallet_id, user_id, amount, description=None, idempotency_key=None):
+# ============================================================
+# CONTRIBUTION (ATOMIC)
+# ============================================================
+def contribute_to_wallet(wallet_id, user_id, amount, description=None):
     """
-    Add contribution to wallet.
-
-    ATOMIC: All or nothing.
-    Updates: WalletTransaction, MemberContribution, MemberLedger, GroupWallet
-
-    Returns: (MemberContribution, WalletTransaction)
+    Make a contribution to group wallet.
+    Updates MemberLedger (creates if doesn't exist).
     """
-    if not idempotency_key:
-        idempotency_key = generate_idempotency_key("contrib")
-
     try:
         # Validate amount
-        if not amount or amount <= 0:
-            raise InvalidAmountError("Contribution amount must be greater than 0")
+        if amount <= 0:
+            raise ValueError("Contribution amount must be positive")
 
         # Get wallet
         wallet = GroupWallet.query.get(wallet_id)
         if not wallet:
-            raise WalletError(f"Wallet {wallet_id} not found")
+            raise ValueError("Wallet not found")
 
-        # Check authorization
-        allowed, reason = can_contribute(user_id, wallet_id)
-        if not allowed:
-            raise WalletError(reason)
-
-        # Check idempotency
-        existing = check_idempotency(idempotency_key)
-        if existing:
-            raise DuplicateTransactionError(f"Transaction already exists")
-
-        # Calculate new balance
-        new_balance = wallet.balance + amount
-
-        # Create transaction (SOURCE OF TRUTH)
-        transaction = WalletTransaction(
+        # Find or create ledger (don't filter by is_active)
+        ledger = MemberLedger.query.filter_by(
             wallet_id=wallet_id,
-            transaction_type=TransactionType.CONTRIBUTION.value,
-            amount=amount,
-            balance_after=new_balance,
-            reference_type='member_contribution',
-            created_by=user_id,
-            description=description or f"Contribution by user {user_id}",
-            idempotency_key=idempotency_key
-        )
-        db.session.add(transaction)
-        db.session.flush()
+            user_id=user_id
+        ).first()
+
+        if not ledger:
+            # Create new ledger WITH ALL FIELDS INITIALIZED
+            ledger = MemberLedger(
+                wallet_id=wallet_id,
+                user_id=user_id,
+                principal_contributed=0.0,  # Initialize to 0
+                principal_withdrawn=0.0,  # Initialize to 0
+                interest_earned=0.0,  # Initialize to 0
+                interest_withdrawn=0.0,  # Initialize to 0
+                total_principal_ever=0.0,  # Initialize to 0
+                total_interest_ever=0.0,  # Initialize to 0
+                is_active=True
+            )
+            db.session.add(ledger)
+
+        # Ensure ledger is active
+        ledger.is_active = True
 
         # Create contribution record
         contribution = MemberContribution(
             wallet_id=wallet_id,
             user_id=user_id,
             amount=amount,
-            description=description,
-            transaction_id=transaction.id
+            description=description
         )
         db.session.add(contribution)
-        db.session.flush()
 
-        # Update transaction reference
-        transaction.reference_id = contribution.id
+        # Update ledger - ensure all fields are floats
+        if ledger.principal_contributed is None:
+            ledger.principal_contributed = 0.0
+        if ledger.total_principal_ever is None:
+            ledger.total_principal_ever = 0.0
 
-        # Update member ledger
-        ledger = get_or_create_member_ledger(wallet_id, user_id)
         ledger.add_contribution(amount)
 
-        # Update member's financial summary
-        update_member_financial_summary(user_id)
+        # Create wallet transaction
+        transaction = WalletTransaction(
+            wallet_id=wallet_id,
+            transaction_type=TransactionType.CONTRIBUTION.value,
+            amount=amount,
+            created_by=user_id,
+            reference_type='member_contribution',
+            reference_id=contribution.id,
+            description=description or f"Contribution by user {user_id}",
+            idempotency_key=WalletTransaction.generate_idempotency_key()
+        )
+        db.session.add(transaction)
 
-        # Update wallet cache
-        wallet.balance = new_balance
-        wallet.total_contributed += amount
-        wallet.is_dirty = False
-        wallet.last_recalculated_at = datetime.utcnow()
+        # Link contribution to transaction
+        contribution.transaction_id = transaction.id
+
+        # Mark wallet as dirty (needs recalculation)
+        wallet.mark_dirty()
+
+        # Mark member's financial summary as dirty
+        summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
+        if summary:
+            summary.is_dirty = True
 
         db.session.commit()
+        return contribution
 
-        return contribution, transaction
-
-    except (InvalidAmountError, DuplicateTransactionError, WalletError, AuthorizationError):
-        db.session.rollback()
-        raise
     except Exception as e:
         db.session.rollback()
-        raise WalletError(f"Contribution failed: {str(e)}")
-
-
+        raise
 # ============================================================
 # CREATE CONTRIBUTION SNAPSHOT (Called at loan approval)
 # ============================================================
