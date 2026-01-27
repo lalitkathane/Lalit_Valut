@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Rejoin Group - {{ group.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Rejoin Group: {{ group.name }}</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        You're rejoining {{ group.name }}.
+                        {% if group.get_active_member_count() %}
+                            There are {{ group.get_active_member_count() }} active members.
+                        {% endif %}
+                    </p>
+
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="contribution_amount" class="form-label">
+                                Optional Initial Contribution
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text">₹</span>
+                                <input type="number"
+                                       class="form-control"
+                                       id="contribution_amount"
+                                       name="contribution_amount"
+                                       min="0"
+                                       step="100"
+                                       value="0">
+                            </div>
+                            <div class="form-text">
+                                You can make an initial contribution now, or contribute later.
+                                Group wallet balance: ₹{{ "%.2f"|format(group.wallet.balance) }}
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Note:</strong> When rejoining, your previous contribution history
+                            will be archived. This is a fresh membership start.
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <a href="{{ url_for('groups.list_groups') }}" class="btn btn-secondary">
+                                Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                Rejoin Group
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

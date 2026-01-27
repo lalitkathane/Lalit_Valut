@@ -405,8 +405,7 @@ def get_member_group_financial_summary(user_id, group_id):
 def rejoin_group(user_id, group_id, contribution_amount=0):
     """
     Re-join a group after withdrawal.
-
-    This function is also in models.py, but included here for service consistency.
+    Creates a fresh MemberLedger for the new membership period.
     """
     # Check if already active member
     existing = GroupMember.query.filter_by(
@@ -416,7 +415,7 @@ def rejoin_group(user_id, group_id, contribution_amount=0):
     ).first()
 
     if existing:
-        raise ValueError("User is already an active member of this group")
+        raise MembershipError("User is already an active member of this group")
 
     # Find inactive membership
     inactive_membership = GroupMember.query.filter_by(
@@ -428,26 +427,68 @@ def rejoin_group(user_id, group_id, contribution_amount=0):
     if inactive_membership:
         # Reactivate
         inactive_membership.reactivate()
+        membership = inactive_membership
     else:
         # Create new membership
-        inactive_membership = GroupMember(
+        membership = GroupMember(
             group_id=group_id,
             user_id=user_id,
             role='member'
         )
-        db.session.add(inactive_membership)
+        db.session.add(membership)
+
+    # Get wallet
+    wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+    if not wallet:
+        raise MembershipError("Group wallet not found")
+
+    # ARCHIVE any existing active ledger (from previous membership)
+    old_ledger = MemberLedger.query.filter_by(
+        wallet_id=wallet.id,
+        user_id=user_id
+    ).first()
+
+    if old_ledger:
+        # Reset ledger for fresh start (or mark as archived)
+        old_ledger.principal_contributed = 0
+        old_ledger.principal_withdrawn = 0
+        old_ledger.interest_earned = 0
+        old_ledger.interest_withdrawn = 0
+        old_ledger.last_contribution_at = None
+        old_ledger.last_withdrawal_at = None
+        old_ledger.last_interest_credit_at = None
 
     # If contributing new money
     if contribution_amount > 0:
         from app.services.wallet_service import contribute_to_wallet
-        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
-        if wallet:
-            contribute_to_wallet(
+
+        # Make contribution (this will create/update ledger)
+        contribute_to_wallet(
+            wallet_id=wallet.id,
+            user_id=user_id,
+            amount=contribution_amount,
+            description="Re-joining contribution"
+        )
+    else:
+        # Ensure there's a ledger with zero balance
+        ledger = MemberLedger.query.filter_by(
+            wallet_id=wallet.id,
+            user_id=user_id
+        ).first()
+
+        if not ledger:
+            # Create fresh zero-balance ledger
+            ledger = MemberLedger(
                 wallet_id=wallet.id,
                 user_id=user_id,
-                amount=contribution_amount,
-                description="Re-joining contribution"
+                principal_contributed=0,
+                principal_withdrawn=0,
+                interest_earned=0,
+                interest_withdrawn=0,
+                total_principal_ever=0,
+                total_interest_ever=0
             )
+            db.session.add(ledger)
 
     # Update member's financial summary
     summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
@@ -455,5 +496,4 @@ def rejoin_group(user_id, group_id, contribution_amount=0):
         summary.is_dirty = True
 
     db.session.commit()
-
-    return inactive_membership
+    return membership

@@ -405,13 +405,19 @@ def can_rejoin_group(user_id, group_id):
     Check if user can rejoin group.
 
     Requirements:
-    - User must have been a member before (inactive membership)
-    - No pending liabilities from previous membership
+    - User must NOT be currently active member
+    - If previous membership existed, must have no outstanding liabilities
+    - Group must be active
     """
     # Check if already active member
     active_membership = get_membership(user_id, group_id)
     if active_membership:
         return False, "You are already an active member of this group"
+
+    # Check if group is active
+    group = Group.query.get(group_id)
+    if not group or not group.is_active:
+        return False, "Group is not active or doesn't exist"
 
     # Check for inactive membership
     inactive_membership = GroupMember.query.filter_by(
@@ -421,12 +427,13 @@ def can_rejoin_group(user_id, group_id):
     ).first()
 
     if not inactive_membership:
-        return True, "No previous membership found (can join as new)"
+        return True, "No previous membership found (can join as new member)"
 
     # Check if there were any liabilities when they left
-    # (This would require additional tracking - simplified for now)
-    return True, "Can rejoin group"
+    # For now, we'll allow rejoining
+    # You could add checks for old loans, etc.
 
+    return True, "Can rejoin group"
 
 # ============================================================
 # HELPER FUNCTION: REQUIRE AUTHORIZATION

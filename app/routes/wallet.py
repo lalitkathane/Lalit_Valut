@@ -382,6 +382,8 @@ def interest_distributions(group_id):
 # Add these new routes to wallet.py
 
 # ============== WITHDRAW FROM WALLET ==============
+# ============== WITHDRAW FROM WALLET ==============
+# ============== WITHDRAW FROM WALLET ==============
 @wallet_bp.route('/groups/<int:group_id>/wallet/withdraw', methods=['GET', 'POST'])
 @login_required
 def withdraw_from_wallet(group_id):
@@ -406,22 +408,38 @@ def withdraw_from_wallet(group_id):
         flash(withdrawable['error'], 'danger')
         return redirect(url_for('wallet.view_wallet', group_id=group_id))
 
-    # Get member ledger
+    # Get member ledger (this contains member_balance)
     ledger = MemberLedger.query.filter_by(
         wallet_id=wallet.id,
         user_id=current_user.id
     ).first()
 
+    # Create member_balance object from ledger (DO THIS BEFORE THE POST CHECK)
+    member_balance = {
+        'total_balance': ledger.total_balance if ledger else 0,
+        'net_principal': ledger.net_principal if ledger else 0,
+        'net_interest': ledger.net_interest if ledger else 0
+    }
+
     if request.method == 'POST':
         try:
-            principal_amount = float(request.form.get('principal_amount', 0))
-            interest_amount = float(request.form.get('interest_amount', 0))
+            # Get the single amount field
+            amount = float(request.form.get('amount', 0))
             withdrawal_type = request.form.get('withdrawal_type', 'principal_only')
             membership_action = request.form.get('membership_action', 'keep_active')
 
-            if principal_amount <= 0 and interest_amount <= 0:
+            if amount <= 0:
                 flash('Please specify an amount to withdraw!', 'danger')
                 return redirect(url_for('wallet.withdraw_from_wallet', group_id=group_id))
+
+            # Calculate principal and interest based on withdrawal type
+            if withdrawal_type == 'principal_only':
+                principal_amount = min(amount, member_balance['net_principal'])
+                interest_amount = 0
+            else:  # with_interest
+                # Withdraw principal first, then interest
+                principal_amount = min(amount, member_balance['net_principal'])
+                interest_amount = min(amount - principal_amount, member_balance['net_interest'])
 
             from app.services.withdrawal_service import create_withdrawal_request
             withdrawal = create_withdrawal_request(
@@ -444,9 +462,9 @@ def withdraw_from_wallet(group_id):
         group=group,
         wallet=wallet,
         ledger=ledger,
-        withdrawable=withdrawable
+        withdrawable=withdrawable,
+        member_balance=member_balance  # Now available in both GET and POST
     )
-
 
 # ============== WITHDRAWAL HISTORY ==============
 @wallet_bp.route('/groups/<int:group_id>/wallet/withdrawal-history')

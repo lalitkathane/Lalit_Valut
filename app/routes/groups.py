@@ -13,14 +13,15 @@ from datetime import datetime
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import Group, GroupMember, User, MemberRole, LoanRequest, LoanStatus, MemberLedger, WithdrawalRequest
+from app.models import Group, GroupMember, User, MemberRole, LoanRequest, LoanStatus, MemberLedger, WithdrawalRequest, \
+    MemberFinancialSummary, GroupWallet
 from app.services.wallet_service import create_wallet_for_group
 from app.services.membership_service import (
     add_member, leave_group, remove_member, transfer_admin,
     get_member_liabilities, MembershipError
 )
 from app.services.authorization_service import (
-    is_group_admin, is_group_member, AuthorizationError
+    is_group_admin, is_group_member, AuthorizationError, can_rejoin_group, can_leave_group
 )
 
 groups_bp = Blueprint('groups', __name__)
@@ -218,28 +219,102 @@ def remove_member_route(group_id, user_id):
     return redirect(url_for('groups.view_group', group_id=group_id))
 
 
+# # ============== LEAVE GROUP ==============
+# def leave_group(group_id, user_id, reason=None):
+#     """Member leaves group - archives their ledger"""
+#     try:
+#         # Check authorization
+#         allowed, error_reason = can_leave_group(user_id, group_id)
+#         if not allowed:
+#             raise AuthorizationError(error_reason)
+#
+#         membership = GroupMember.query.filter_by(
+#             group_id=group_id,
+#             user_id=user_id,
+#             is_active=True
+#         ).first()
+#
+#         if not membership:
+#             raise MembershipError("You are not a member of this group")
+#
+#         wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+#         if not wallet:
+#             raise MembershipError("Group wallet not found")
+#
+#         ledger = MemberLedger.query.filter_by(
+#             wallet_id=wallet.id,
+#             user_id=user_id,
+#             is_active=True  # Only active ledger
+#         ).first()
+#
+#         # Check if member has contributions to withdraw
+#         if ledger and ledger.net_principal > 0:
+#             raise MembershipError(
+#                 f"You must withdraw your contributions (₹{ledger.net_principal:.2f}) before leaving the group."
+#             )
+#
+#         # ARCHIVE THE LEDGER WHEN LEAVING
+#         if ledger:
+#             ledger.is_active = False
+#
+#         # Soft delete membership
+#         membership.soft_delete(reason=reason or "Member left voluntarily")
+#
+#         # Mark financial summary as dirty
+#         summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
+#         if summary:
+#             summary.is_dirty = True
+#
+#         db.session.commit()
+#         return True
+#
+#     except (AuthorizationError, MembershipError):
+#         db.session.rollback()
+#         raise
+#     except Exception as e:
+#         db.session.rollback()
+#         raise MembershipError(f"Failed to leave group: {str(e)}")
 # ============== LEAVE GROUP ==============
+# REMOVE OR COMMENT OUT THIS FUNCTION - IT'S NOT A ROUTE
+# def leave_group(group_id, user_id, reason=None):
+#     """Member leaves group - archives their ledger"""
+#     # ... function body ...
+
+# ============== LEAVE GROUP ROUTE ==============
 @groups_bp.route('/groups/<int:group_id>/leave', methods=['GET', 'POST'])
 @login_required
 def leave_group_route(group_id):
+    """Member leaves group"""
     group = Group.query.get_or_404(group_id)
-    liabilities = get_member_liabilities(current_user.id, group_id)
+
+    if not is_group_member(current_user.id, group_id):
+        flash('You are not a member of this group!', 'danger')
+        return redirect(url_for('groups.list_groups'))
+
+    # Check if user is the last admin
+    is_admin = is_group_admin(current_user.id, group_id)
+    if is_admin:
+        admin_count = GroupMember.query.filter_by(
+            group_id=group_id,
+            role=MemberRole.ADMIN.value,
+            is_active=True
+        ).count()
+
+        if admin_count <= 1:
+            flash('Cannot leave group as you are the only admin. Transfer admin rights first or delete the group.',
+                  'danger')
+            return redirect(url_for('groups.view_group', group_id=group_id))
 
     if request.method == 'POST':
-        if not liabilities['can_leave']:
-            flash('Cannot leave - you have outstanding liabilities!', 'danger')
-            return redirect(url_for('groups.leave_group_route', group_id=group_id))
-
         try:
-            leave_group(group_id, current_user.id)
-            flash('You left the group.', 'info')
+            # Use the leave_group function from membership_service
+            leave_group(group_id, current_user.id, "Member left voluntarily")
+            flash(f'You have left {group.name}', 'success')
             return redirect(url_for('groups.list_groups'))
         except (MembershipError, AuthorizationError) as e:
             flash(str(e), 'danger')
-            return redirect(url_for('groups.view_group', group_id=group_id))
 
-    return render_template('groups/leave.html', group=group, liabilities=liabilities)
-
+    return render_template('groups/leave_group.html', group=group)
 
 # ============== TRANSFER ADMIN ==============
 @groups_bp.route('/groups/<int:group_id>/transfer-admin', methods=['GET', 'POST'])
@@ -388,3 +463,37 @@ def delete_group_route(group_id):
         db.session.rollback()
         flash(f'Error deleting group: {str(e)}', 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
+
+
+@groups_bp.route('/groups/<int:group_id>/rejoin', methods=['GET', 'POST'])
+@login_required
+def rejoin_group_route(group_id):
+    """Re-join a group"""
+    group = Group.query.get_or_404(group_id)
+
+    # Check authorization
+    allowed, reason = can_rejoin_group(current_user.id, group_id)
+    if not allowed:
+        flash(reason, 'danger')
+        return redirect(url_for('groups.list_groups'))
+
+    if request.method == 'POST':
+        contribution_amount = request.form.get('contribution_amount', 0, type=float)
+
+        try:
+            # Rejoin with optional contribution
+            membership = rejoin_group(current_user.id, group_id, contribution_amount)
+
+            if contribution_amount > 0:
+                flash(f'Rejoined group with contribution of ₹{contribution_amount}!', 'success')
+            else:
+                flash('Rejoined group successfully!', 'success')
+
+            return redirect(url_for('groups.view_group', group_id=group_id))
+
+        except MembershipError as e:
+            flash(str(e), 'danger')
+        except Exception as e:
+            flash(f'Error rejoining group: {str(e)}', 'danger')
+
+    return render_template('groups/rejoin.html', group=group)

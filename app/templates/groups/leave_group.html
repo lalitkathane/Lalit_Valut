@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block title %}Leave Group - {{ group.name }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0 fw-bold text-danger">
+                        <i class="bi bi-box-arrow-left me-2"></i>Leave Group
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>Warning:</strong> You are about to leave "{{ group.name }}"
+                    </div>
+
+                    <p class="mb-3">Are you sure you want to leave this group?</p>
+
+                    <div class="alert alert-danger">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        <strong>Consequences:</strong>
+                        <ul class="mb-0 mt-2 small">
+                            <li>You will lose access to all group data and history</li>
+                            <li>Your contributions will remain in the group</li>
+                            <li>You will need to be re-invited to rejoin</li>
+                            {% if is_admin %}
+                            <li class="fw-bold">You are an admin - make sure to transfer admin rights if needed</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+
+                    <form method="POST">
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('groups.view_group', group_id=group.id) }}"
+                               class="btn btn-outline-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-danger">
+                                Yes, Leave Group
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
