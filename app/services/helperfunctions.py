@@ -1007,8 +1007,9 @@ def validate_repayment_amount(amount, loan, group, paid_emis):
 
 def get_repayment_form_data(loan_id, user_id):
     """Get data for repayment form"""
-    from app.models import LoanRequest, Group, EMISchedule
+    from app.models import LoanRequest, Group, EMISchedule, LoanRepayment
     from datetime import datetime
+    from sqlalchemy import extract
 
     loan = LoanRequest.query.get_or_404(loan_id)
     group = loan.group
@@ -1018,16 +1019,15 @@ def get_repayment_form_data(loan_id, user_id):
         return None, 'This loan has already been fully repaid!'
 
     # Check if user has already submitted ANY repayment for this month
-    import app.extensions as db
     current_month = datetime.utcnow().month
     current_year = datetime.utcnow().year
 
-    from app.models import LoanRepayment
+    # Corrected: Using sqlalchemy.extract instead of db.extract
     repayment_this_month = LoanRepayment.query.filter(
         LoanRepayment.loan_id == loan_id,
         LoanRepayment.paid_by == user_id,
-        db.extract('month', LoanRepayment.submitted_at) == current_month,
-        db.extract('year', LoanRepayment.submitted_at) == current_year
+        extract('month', LoanRepayment.submitted_at) == current_month,
+        extract('year', LoanRepayment.submitted_at) == current_year
     ).first()
 
     if repayment_this_month:
@@ -1072,7 +1072,6 @@ def get_repayment_form_data(loan_id, user_id):
         'remaining_emis': remaining_emis,
         'can_make_full_payment': can_make_full_payment
     }, None
-
 
 def get_my_loans_data(user_id):
     """Get data for my loans dashboard"""
@@ -1546,7 +1545,9 @@ def get_personal_wallet_summary_data(group_id, user_id):
     }, None
 
 
-def validate_withdrawal_data(amount, withdrawal_type, member_balance):
+# In the WALLET ROUTE HELPERS section, update these functions:
+
+def validate_withdrawal_data(amount, member_balance):
     """Validate withdrawal form data"""
     if amount <= 0:
         return False, 'Please specify an amount to withdraw!'
@@ -1554,20 +1555,23 @@ def validate_withdrawal_data(amount, withdrawal_type, member_balance):
     if amount > member_balance['total_balance']:
         return False, f'Cannot withdraw more than your total balance of ₹{member_balance["total_balance"]}!'
 
-    if withdrawal_type == 'principal_only' and amount > member_balance['net_principal']:
-        return False, f'Cannot withdraw more principal than available (₹{member_balance["net_principal"]})!'
-
     return True, None
 
 
-def calculate_withdrawal_amounts(amount, withdrawal_type, member_balance):
-    """Calculate principal and interest amounts for withdrawal"""
-    if withdrawal_type == 'principal_only':
-        principal_amount = min(amount, member_balance['net_principal'])
+def calculate_withdrawal_amounts(amount, member_balance):
+    """Calculate principal and interest amounts for withdrawal proportionally"""
+    if member_balance['total_balance'] > 0:
+        principal_ratio = member_balance['net_principal'] / member_balance['total_balance']
+        interest_ratio = member_balance['net_interest'] / member_balance['total_balance']
+
+        principal_amount = round(amount * principal_ratio, 2)
+        interest_amount = round(amount * interest_ratio, 2)
+
+        # Adjust for rounding errors
+        if principal_amount + interest_amount != amount:
+            principal_amount = amount - interest_amount
+    else:
+        principal_amount = 0
         interest_amount = 0
-    else:  # with_interest
-        # Withdraw principal first, then interest
-        principal_amount = min(amount, member_balance['net_principal'])
-        interest_amount = min(amount - principal_amount, member_balance['net_interest'])
 
     return principal_amount, interest_amount

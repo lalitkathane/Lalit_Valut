@@ -571,7 +571,7 @@ class MemberContribution(db.Model):
 class WithdrawalRequest(db.Model):
     """
     Handles member withdrawals from groups.
-    Members can withdraw their principal (and optionally interest).
+    Members can withdraw their principal and interest proportionally.
     """
     __tablename__ = 'withdrawal_requests'
 
@@ -580,7 +580,6 @@ class WithdrawalRequest(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), nullable=False)
 
     # Withdrawal details
-    withdrawal_type = db.Column(db.String(20), nullable=False)  # 'principal_only', 'with_interest'
     principal_amount = db.Column(db.Float, nullable=False)
     interest_amount = db.Column(db.Float, default=0.0, nullable=False)
     total_amount = db.Column(db.Float, nullable=False)
@@ -631,7 +630,6 @@ class WithdrawalRequest(db.Model):
         self.approved_at = datetime.utcnow()
         self.rejection_reason = reason
 
-    # In WithdrawalRequest model:
     def process_withdrawal(self):
         """Process the withdrawal - update all related records"""
         if self.status != WithdrawalStatus.APPROVED.value:
@@ -691,6 +689,7 @@ class WithdrawalRequest(db.Model):
 
     def __repr__(self):
         return f'<WithdrawalRequest user={self.user_id} amount=₹{self.total_amount} status={self.status}>'
+
 
 # ============================================================
 # WALLET TRANSACTION MODEL (LEDGER)
