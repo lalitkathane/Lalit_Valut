@@ -60,7 +60,13 @@
 {% if personal_summary and personal_summary.has_ledger %}
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white py-3">
-        <h6 class="fw-semibold mb-0"><i class="bi bi-person-circle"></i> Your Summary</h6>
+        <div class="d-flex justify-content-between align-items-center">
+            <h6 class="fw-semibold mb-0"><i class="bi bi-person-circle"></i> Your Summary</h6>
+            <a href="{{ url_for('wallet.personal_wallet_summary', group_id=group.id) }}"
+               class="btn btn-sm btn-outline-primary">
+                View Full Summary
+            </a>
+        </div>
     </div>
     <div class="card-body">
         <div class="row text-center">
@@ -83,11 +89,37 @@
                 </div>
             </div>
         </div>
-        <div class="text-center mt-2">
-            <a href="{{ url_for('wallet.personal_wallet_summary', group_id=group.id) }}"
-               class="btn btn-sm btn-outline-primary">
-                View Full Summary
-            </a>
+
+        <!-- Quick Actions Buttons -->
+        <div class="mt-4 pt-3 border-top">
+            <div class="row g-2 justify-content-center">
+                {% if personal_summary.member_summary.net_principal <= 0 %}
+                <!-- Only Contribute button (full width) -->
+                <div class="col-12">
+                    <a href="{{ url_for('wallet.contribute', group_id=group.id) }}"
+                       class="btn btn-success w-100 py-2 d-flex flex-column align-items-center">
+                        <i class="bi bi-plus-circle fs-4 mb-1"></i>
+                        <span class="small">Contribute</span>
+                    </a>
+                </div>
+                {% else %}
+                <!-- Both Contribute and Withdraw buttons (side by side) -->
+                <div class="col-md-6">
+                    <a href="{{ url_for('wallet.contribute', group_id=group.id) }}"
+                       class="btn btn-success w-100 py-2 d-flex flex-column align-items-center">
+                        <i class="bi bi-plus-circle fs-4 mb-1"></i>
+                        <span class="small">Contribute</span>
+                    </a>
+                </div>
+                <div class="col-md-6">
+                    <a href="{{ url_for('wallet.withdraw_from_wallet', group_id=group.id) }}"
+                       class="btn btn-outline-primary w-100 py-2 d-flex flex-column align-items-center">
+                        <i class="bi bi-arrow-up-circle fs-4 mb-1"></i>
+                        <span class="small">Withdraw</span>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
@@ -187,38 +219,6 @@
     </div>
 </div>
 {% endif %}
-
-<!-- Quick Actions -->
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white py-3">
-        <h6 class="fw-semibold mb-0"><i class="bi bi-lightning"></i> Quick Actions</h6>
-    </div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-md-4">
-                <a href="{{ url_for('wallet.contribute', group_id=group.id) }}"
-                   class="btn btn-success w-100 py-3 d-flex flex-column align-items-center">
-                    <i class="bi bi-plus-circle fs-2 mb-2"></i>
-                    <span>Contribute</span>
-                </a>
-            </div>
-            <div class="col-md-4">
-                <a href="{{ url_for('wallet.withdraw_from_wallet', group_id=group.id) }}"
-                   class="btn btn-outline-primary w-100 py-3 d-flex flex-column align-items-center">
-                    <i class="bi bi-arrow-up-circle fs-2 mb-2"></i>
-                    <span>Withdraw</span>
-                </a>
-            </div>
-            <div class="col-md-4">
-                <a href="{{ url_for('wallet.interest_distributions', group_id=group.id) }}"
-                   class="btn btn-outline-warning w-100 py-3 d-flex flex-column align-items-center">
-                    <i class="bi bi-graph-up fs-2 mb-2"></i>
-                    <span>My Interest</span>
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Recent Transactions -->
 <div class="card border-0 shadow-sm">

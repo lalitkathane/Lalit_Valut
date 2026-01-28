@@ -32,13 +32,33 @@
                         {% endif %}
                     {% endwith %}
 
+                    <!-- Admin Notice -->
+                    {% if is_group_admin %}
+                    <div class="alert alert-warning mb-4">
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-shield-exclamation fs-4 me-3"></i>
+                            <div>
+                                <h6 class="fw-bold mb-1">Administrator Restriction</h6>
+                                <p class="mb-0">
+                                    As the group administrator, you can only make <strong>partial withdrawals</strong>.
+                                    To leave the group, you must first transfer your admin privileges to another member.
+                                    <br>
+                                    <a href="{{ url_for('groups.transfer_admin_route', group_id=group.id) }}" class="btn btn-sm btn-outline-warning mt-2">
+                                        <i class="bi bi-arrow-left-right"></i> Transfer Admin
+                                    </a>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <!-- Wallet Summary -->
                     <div class="alert alert-info mb-4">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="mb-1 fw-bold">Your Balance</h6>
                                 <div class="d-flex align-items-baseline">
-                                    <h3 class="fw-bold mb-0">₹{{ "%.2f"|format(member_balance.total_balance) }}</h3>
+                                    <h3 class="fw-bold mb-0" id="totalBalance">₹{{ "%.2f"|format(member_balance.total_balance) }}</h3>
                                     <small class="text-muted ms-2">
                                         (Principal: ₹{{ "%.2f"|format(member_balance.net_principal) }},
                                         Interest: ₹{{ "%.2f"|format(member_balance.net_interest) }})
@@ -50,25 +70,44 @@
 
                     <!-- Withdrawal Form -->
                     <form method="POST" action="{{ url_for('wallet.withdraw_from_wallet', group_id=group.id) }}">
+                        <!-- Membership Action -->
                         <div class="mb-4">
                             <label class="form-label fw-semibold">Withdrawal Type</label>
-                            <div class="btn-group w-100" role="group">
-                                <input type="radio" class="btn-check" name="withdrawal_type" id="principal_only"
-                                       value="principal_only" checked>
-                                <label class="btn btn-outline-primary" for="principal_only">
-                                    <i class="bi bi-cash me-2"></i>Principal Only
-                                </label>
-
-                                <input type="radio" class="btn-check" name="withdrawal_type" id="with_interest"
-                                       value="with_interest">
-                                <label class="btn btn-outline-success" for="with_interest">
-                                    <i class="bi bi-cash-stack me-2"></i>Principal + Interest
-                                </label>
+                            <div class="d-flex gap-3">
+                                <div class="form-check mb-2 flex-fill">
+                                    <input class="form-check-input" type="radio" name="membership_action"
+                                           id="keep_active" value="keep_active"
+                                           {% if is_group_admin %}checked{% else %}checked{% endif %}
+                                           data-action="partial" data-amount="{{ member_balance.total_balance }}"
+                                           {% if is_group_admin %}onclick="return false;" style="cursor: not-allowed;"{% endif %}>
+                                    <label class="form-check-label d-block p-3 border rounded {% if is_group_admin %}bg-light{% endif %}"
+                                           for="keep_active">
+                                        <strong>Partial Withdrawal</strong>
+                                        <small class="d-block text-muted mt-1">Withdraw any amount and keep membership active</small>
+                                        {% if is_group_admin %}
+                                        <small class="d-block text-success mt-2">
+                                            <i class="bi bi-check-circle"></i> Only option available for administrators
+                                        </small>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                                <div class="form-check flex-fill">
+                                    <input class="form-check-input" type="radio" name="membership_action"
+                                           id="deactivate" value="deactivate"
+                                           data-action="full" data-amount="{{ member_balance.total_balance }}"
+                                           {% if is_group_admin %}disabled onclick="return false;" style="cursor: not-allowed;"{% endif %}>
+                                    <label class="form-check-label d-block p-3 border rounded {% if is_group_admin %}bg-light text-muted{% endif %}"
+                                           for="deactivate">
+                                        <strong>Full Withdrawal & Leave</strong>
+                                        <small class="d-block text-muted mt-1">Withdraw all funds and deactivate membership</small>
+                                        {% if is_group_admin %}
+                                        <small class="d-block text-danger mt-2">
+                                            <i class="bi bi-x-circle"></i> Not available for administrators
+                                        </small>
+                                        {% endif %}
+                                    </label>
+                                </div>
                             </div>
-                            <small class="text-muted mt-1 d-block">
-                                <span id="principal_only_desc">Withdraw only your contributed principal amount</span>
-                                <span id="with_interest_desc" style="display: none;">Withdraw both principal and earned interest</span>
-                            </small>
                         </div>
 
                         <!-- Amount Input -->
@@ -77,35 +116,20 @@
                             <div class="input-group">
                                 <span class="input-group-text">₹</span>
                                 <input type="number" class="form-control" id="amount" name="amount"
-                                       step="0.01" min="0" required
-                                       placeholder="Enter amount">
+                                       step="0.01" min="0" max="{{ member_balance.total_balance }}"
+                                       placeholder="Enter amount" required
+                                       value="{% if is_group_admin %}{% else %}{{ member_balance.total_balance }}{% endif %}">
+                                <button type="button" class="btn btn-outline-secondary" id="useMaxBtn">
+                                    <i class="bi bi-arrow-up-square"></i> Max
+                                </button>
                             </div>
                             <div class="form-text">
-                                <div class="d-flex justify-content-between small">
-                                    <span>Available principal: <strong>₹{{ "%.2f"|format(member_balance.net_principal) }}</strong></span>
-                                    <span>Available interest: <strong>₹{{ "%.2f"|format(member_balance.net_interest) }}</strong></span>
+                                <div class="d-flex justify-content-between align-items-center small mt-2">
+                                    <span>Available total balance: <strong>₹{{ "%.2f"|format(member_balance.total_balance) }}</strong></span>
+                                    <span class="badge bg-warning bg-opacity-10 text-warning" id="withdrawalTypeBadge">
+                                        {% if is_group_admin %}Partial Withdrawal Only{% else %}Full Withdrawal Selected{% endif %}
+                                    </span>
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Membership Action -->
-                        <div class="mb-4">
-                            <label class="form-label fw-semibold">After Withdrawal</label>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="membership_action"
-                                       id="keep_active" value="keep_active" checked>
-                                <label class="form-check-label" for="keep_active">
-                                    <strong>Keep membership active</strong>
-                                    <small class="d-block text-muted">Remain in the group and continue participating</small>
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="membership_action"
-                                       id="deactivate" value="deactivate">
-                                <label class="form-check-label" for="deactivate">
-                                    <strong>Leave the group</strong>
-                                    <small class="d-block text-muted">Withdraw all funds and deactivate membership</small>
-                                </label>
                             </div>
                         </div>
 
@@ -125,7 +149,13 @@
                                     <ul class="small text-muted mt-2 mb-0">
                                         <li>Withdrawals require admin approval</li>
                                         <li>Funds will be available after approval</li>
+                                        <li>Withdrawal includes both principal and interest proportionally</li>
+                                        {% if not is_group_admin %}
                                         <li>If I choose to leave the group, I'll lose access to all group data</li>
+                                        {% else %}
+                                        <li>As an admin, I can only make partial withdrawals</li>
+                                        <li>To leave the group, I must first transfer admin privileges</li>
+                                        {% endif %}
                                         <li>This action cannot be undone</li>
                                     </ul>
                                 </label>
@@ -136,8 +166,13 @@
                         <div class="d-flex justify-content-between pt-2">
                             <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}"
                                class="btn btn-outline-secondary">Cancel</a>
-                            <button type="submit" class="btn btn-warning">
-                                <i class="bi bi-cash me-2"></i>Submit Withdrawal Request
+                            <button type="submit" class="btn btn-warning" id="submitBtn">
+                                <i class="bi bi-cash me-2"></i>
+                                {% if is_group_admin %}
+                                Submit Partial Withdrawal
+                                {% else %}
+                                Submit Withdrawal Request
+                                {% endif %}
                             </button>
                         </div>
                     </form>
@@ -149,34 +184,52 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Update description based on withdrawal type
-    const principalOnlyRadio = document.getElementById('principal_only');
-    const withInterestRadio = document.getElementById('with_interest');
-    const principalDesc = document.getElementById('principal_only_desc');
-    const interestDesc = document.getElementById('with_interest_desc');
+    const totalBalance = {{ member_balance.total_balance }};
+    const isGroupAdmin = {{ 'true' if is_group_admin else 'false' }};
+    const amountInput = document.getElementById('amount');
+    const useMaxBtn = document.getElementById('useMaxBtn');
+    const withdrawalTypeBadge = document.getElementById('withdrawalTypeBadge');
+    const submitBtn = document.getElementById('submitBtn');
+    const reasonTextarea = document.getElementById('reason');
 
-    function updateDescription() {
-        if (principalOnlyRadio.checked) {
-            principalDesc.style.display = 'block';
-            interestDesc.style.display = 'none';
-            // Set max amount to available principal
-            document.getElementById('amount').max = {{ member_balance.net_principal|tojson }};
-        } else {
-            principalDesc.style.display = 'none';
-            interestDesc.style.display = 'block';
-            // Set max amount to total balance
-            document.getElementById('amount').max = {{ member_balance.total_balance|tojson }};
-        }
+    // Get radio buttons
+    const partialRadio = document.getElementById('keep_active');
+    const fullRadio = document.getElementById('deactivate');
+
+    // Initialize based on admin status
+    if (isGroupAdmin) {
+        updateFormState('partial');
+        partialRadio.checked = true;
+        fullRadio.disabled = true;
+    } else {
+        updateFormState('full');
+        fullRadio.checked = true;
     }
 
-    principalOnlyRadio.addEventListener('change', updateDescription);
-    withInterestRadio.addEventListener('change', updateDescription);
-    updateDescription();
+    // Handle radio button changes (only if not admin)
+    if (!isGroupAdmin) {
+        partialRadio.addEventListener('change', function() {
+            if (this.checked) {
+                updateFormState('partial');
+            }
+        });
 
-    // Validate amount input
-    const amountInput = document.getElementById('amount');
+        fullRadio.addEventListener('change', function() {
+            if (this.checked) {
+                updateFormState('full');
+            }
+        });
+    }
+
+    // Use Max button
+    useMaxBtn.addEventListener('click', function() {
+        amountInput.value = totalBalance.toFixed(2);
+        amountInput.dispatchEvent(new Event('input'));
+    });
+
+    // Amount input validation
     amountInput.addEventListener('input', function() {
-        const maxAmount = this.max ? parseFloat(this.max) : 0;
+        const maxAmount = parseFloat(this.max) || 0;
         const value = parseFloat(this.value) || 0;
 
         if (value > maxAmount) {
@@ -186,46 +239,129 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             this.setCustomValidity('');
         }
+
+        // Update button text based on amount
+        updateSubmitButton(value);
     });
 
     // Form submission confirmation
     const form = document.querySelector('form');
     form.addEventListener('submit', function(e) {
         const amount = parseFloat(amountInput.value) || 0;
-        const withdrawalType = document.querySelector('input[name="withdrawal_type"]:checked').value;
-        const membershipAction = document.querySelector('input[name="membership_action"]:checked').value;
+        const membershipAction = isGroupAdmin ? 'keep_active' : document.querySelector('input[name="membership_action"]:checked').value;
 
         let confirmMessage = 'Are you sure you want to submit a withdrawal request for ₹' + amount.toFixed(2) + '?';
 
-        if (withdrawalType === 'principal_only') {
-            confirmMessage += '\n\nType: Principal Only';
-        } else {
-            confirmMessage += '\n\nType: Principal + Interest';
+        if (!isGroupAdmin && membershipAction === 'deactivate') {
+            confirmMessage += '\n\n⚠️ WARNING: You will leave the group and lose access to all group data!';
         }
 
-        if (membershipAction === 'deactivate') {
-            confirmMessage += '\nAction: Leave the group after withdrawal';
-            confirmMessage += '\n\n⚠️ WARNING: You will lose access to all group data!';
-        } else {
-            confirmMessage += '\nAction: Keep membership active';
+        if (isGroupAdmin && amount === totalBalance) {
+            confirmMessage += '\n\nℹ️ NOTE: As an admin, you can withdraw your full balance but will remain in the group.';
         }
 
         if (!confirm(confirmMessage)) {
             e.preventDefault();
         }
     });
+
+    // Update form state based on withdrawal type
+    function updateFormState(type) {
+        if (type === 'full' && !isGroupAdmin) {
+            // Set amount to total balance (only for non-admins)
+            amountInput.value = totalBalance.toFixed(2);
+            amountInput.readOnly = true;
+            amountInput.classList.add('bg-light');
+            useMaxBtn.disabled = true;
+            useMaxBtn.classList.add('d-none');
+            withdrawalTypeBadge.textContent = 'Full Withdrawal';
+            withdrawalTypeBadge.className = 'badge bg-danger bg-opacity-10 text-danger';
+            updateSubmitButton(totalBalance);
+
+            // Auto-add reason for leaving
+            if (!isGroupAdmin) {
+                reasonTextarea.value = 'Full withdrawal - Leaving the group';
+            }
+        } else {
+            // Partial withdrawal or admin (always partial)
+            if (isGroupAdmin) {
+                amountInput.value = '';
+                withdrawalTypeBadge.textContent = 'Partial Withdrawal Only';
+                withdrawalTypeBadge.className = 'badge bg-warning bg-opacity-10 text-warning';
+            } else {
+                amountInput.value = '';
+                withdrawalTypeBadge.textContent = 'Partial Withdrawal';
+                withdrawalTypeBadge.className = 'badge bg-info bg-opacity-10 text-info';
+            }
+
+            amountInput.readOnly = false;
+            amountInput.classList.remove('bg-light');
+            useMaxBtn.disabled = false;
+            useMaxBtn.classList.remove('d-none');
+            updateSubmitButton(0);
+
+            // Clear auto-reason if it was set
+            if (!isGroupAdmin && reasonTextarea.value === 'Full withdrawal - Leaving the group') {
+                reasonTextarea.value = '';
+            }
+        }
+        amountInput.dispatchEvent(new Event('input'));
+    }
+
+    // Update submit button text
+    function updateSubmitButton(amount) {
+        const isFullWithdrawal = !isGroupAdmin && fullRadio.checked;
+
+        if (isFullWithdrawal) {
+            submitBtn.innerHTML = '<i class="bi bi-box-arrow-right me-2"></i>Withdraw All & Leave Group';
+            submitBtn.className = 'btn btn-danger';
+        } else if (amount === totalBalance) {
+            if (isGroupAdmin) {
+                submitBtn.innerHTML = '<i class="bi bi-cash-stack me-2"></i>Withdraw Full Balance (Stay as Admin)';
+            } else {
+                submitBtn.innerHTML = '<i class="bi bi-cash-stack me-2"></i>Withdraw All Funds';
+            }
+            submitBtn.className = 'btn btn-warning';
+        } else {
+            if (isGroupAdmin) {
+                submitBtn.innerHTML = '<i class="bi bi-cash me-2"></i>Submit Partial Withdrawal';
+            } else {
+                submitBtn.innerHTML = '<i class="bi bi-cash me-2"></i>Submit Withdrawal Request';
+            }
+            submitBtn.className = 'btn btn-warning';
+        }
+    }
 });
 </script>
 
 <style>
-.btn-check:checked + .btn-outline-primary {
-    background-color: #0d6efd;
+.form-check-input:checked + .form-check-label {
+    border-color: #0d6efd !important;
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+.form-check-input:disabled + .form-check-label {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+#amount:read-only {
+    background-color: #f8f9fa !important;
+    cursor: not-allowed;
+}
+
+.badge {
+    font-size: 0.75em;
+    padding: 0.35em 0.65em;
+}
+
+.btn-outline-secondary:hover #useMaxBtn {
+    background-color: #6c757d;
     color: white;
 }
 
-.btn-check:checked + .btn-outline-success {
-    background-color: #198754;
-    color: white;
+.bg-light {
+    background-color: #f8f9fa !important;
 }
 </style>
 {% endblock %}

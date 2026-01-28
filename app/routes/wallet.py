@@ -23,6 +23,7 @@ def view_wallet(group_id):
     # Get wallet view data using helper
     wallet_data, error_msg = get_wallet_view_data(group_id, current_user.id)
 
+
     if error_msg:
         flash(error_msg, 'danger')
         return redirect(url_for('groups.list_groups'))
@@ -276,6 +277,7 @@ def interest_distributions(group_id):
 
 
 # ============== WITHDRAW FROM WALLET ==============
+# ============== WITHDRAW FROM WALLET ==============
 @wallet_bp.route('/groups/<int:group_id>/wallet/withdraw', methods=['GET', 'POST'])
 @login_required
 def withdraw_from_wallet(group_id):
@@ -290,29 +292,21 @@ def withdraw_from_wallet(group_id):
     if request.method == 'POST':
         try:
             amount = float(request.form.get('amount', 0))
-            withdrawal_type = request.form.get('withdrawal_type', 'principal_only')
             membership_action = request.form.get('membership_action', 'keep_active')
 
             # Validate withdrawal data
             is_valid, error_msg = validate_withdrawal_data(
-                amount, withdrawal_type, withdraw_data['member_balance']
+                amount, withdraw_data['member_balance']
             )
             if not is_valid:
                 flash(error_msg, 'danger')
                 return render_template('wallet/withdraw.html', **withdraw_data)
 
-            # Calculate withdrawal amounts
-            principal_amount, interest_amount = calculate_withdrawal_amounts(
-                amount, withdrawal_type, withdraw_data['member_balance']
-            )
-
             from app.services.withdrawal_service import create_withdrawal_request
             withdrawal = create_withdrawal_request(
                 user_id=current_user.id,
                 group_id=group_id,
-                principal_amount=principal_amount,
-                interest_amount=interest_amount,
-                withdrawal_type=withdrawal_type,
+                total_amount=amount,
                 membership_action=membership_action
             )
 

@@ -134,11 +134,19 @@ def withdrawal_detail(withdrawal_id):
 
     ledger = get_member_ledger_for_group(withdrawal.user_id, group.id)
 
+    # Create member_balance object for the template
+    member_balance = {
+        'total_balance': ledger.total_balance if ledger else 0,
+        'net_principal': ledger.net_principal if ledger else 0,
+        'net_interest': ledger.net_interest if ledger else 0
+    }
+
     return render_template(
         'admin/withdrawal_detail.html',
         withdrawal=withdrawal,
         group=group,
-        ledger=ledger
+        ledger=ledger,
+        member_balance=member_balance  # Add this line
     )
 
 

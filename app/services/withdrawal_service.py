@@ -4,7 +4,7 @@
 
 from datetime import datetime
 from app.extensions import db
-from app.models import  WithdrawalRequest, WithdrawalStatus
+from app.models import WithdrawalRequest, WithdrawalStatus
 from app.services.authorization_service import (
     can_withdraw, can_approve_withdrawal, is_group_admin, AuthorizationError
 )
@@ -17,12 +17,12 @@ class WithdrawalError(Exception):
     """Base exception for withdrawal operations"""
     pass
 
+
 # ============================================================
 # CREATE WITHDRAWAL REQUEST
 # ============================================================
 
-def create_withdrawal_request(user_id, group_id, principal_amount, interest_amount=0, withdrawal_type='principal_only',
-                              membership_action='deactivate'):
+def create_withdrawal_request(user_id, group_id, total_amount, membership_action='deactivate'):
     try:
         # Check authorization - this already checks:
         # 1. Membership
@@ -34,10 +34,6 @@ def create_withdrawal_request(user_id, group_id, principal_amount, interest_amou
         if not allowed:
             raise AuthorizationError(reason)
 
-        # NO NEED for duplicate loan check here - can_withdraw() already checked it
-        # NO NEED for duplicate wallet check here - can_withdraw() already checked it
-        # NO NEED for duplicate ledger check here - can_withdraw() already checked it
-
         # Get wallet and ledger for amount validations
         # (Using helper functions for consistency)
         wallet = get_group_wallet(group_id)
@@ -47,27 +43,37 @@ def create_withdrawal_request(user_id, group_id, principal_amount, interest_amou
         # But we still need them for amount validations
 
         # Validate amounts (NEW checks not in can_withdraw())
-        if principal_amount <= 0:
-            raise WithdrawalError("Principal amount must be greater than 0")
+        if total_amount <= 0:
+            raise WithdrawalError("Amount must be greater than 0")
 
-        if principal_amount > ledger.net_principal:
-            raise WithdrawalError(f"Insufficient principal balance. Available: ₹{ledger.net_principal}")
-
-        if interest_amount > ledger.net_interest:
-            raise WithdrawalError(f"Insufficient interest balance. Available: ₹{ledger.net_interest}")
-
-        total_amount = principal_amount + interest_amount
+        # Check if amount exceeds total available balance
+        if total_amount > ledger.total_balance:
+            raise WithdrawalError(f"Insufficient balance. Available: ₹{ledger.total_balance}")
 
         # Check group balance (NEW check not in can_withdraw())
         if wallet.balance < total_amount:
             raise WithdrawalError(
                 f"Insufficient group balance. Required: ₹{total_amount}, Available: ₹{wallet.balance}")
 
+        # Calculate principal and interest amounts proportionally
+        if ledger.total_balance > 0:
+            principal_ratio = ledger.net_principal / ledger.total_balance
+            interest_ratio = ledger.net_interest / ledger.total_balance
+
+            principal_amount = round(total_amount * principal_ratio, 2)
+            interest_amount = round(total_amount * interest_ratio, 2)
+
+            # Adjust for rounding errors
+            if principal_amount + interest_amount != total_amount:
+                principal_amount = total_amount - interest_amount
+        else:
+            principal_amount = 0
+            interest_amount = 0
+
         # Create withdrawal request
         withdrawal = WithdrawalRequest(
             user_id=user_id,
             group_id=group_id,
-            withdrawal_type=withdrawal_type,
             principal_amount=principal_amount,
             interest_amount=interest_amount,
             total_amount=total_amount,
@@ -224,8 +230,6 @@ def get_withdrawable_amounts(user_id, group_id):
 
     if not ledger:
         return {
-            "principal_available": 0,
-            "interest_available": 0,
             "total_available": 0,
             "group_balance": wallet.balance
         }
@@ -236,28 +240,24 @@ def get_withdrawable_amounts(user_id, group_id):
     # If member has active loans, they cannot withdraw
     if active_loans:
         return {
-            "principal_available": 0,
-            "interest_available": 0,
             "total_available": 0,
             "group_balance": wallet.balance,
             "member_net_principal": ledger.net_principal,
             "member_net_interest": ledger.net_interest,
+            "member_total_balance": ledger.total_balance,
             "has_active_loans": True,
             "message": "Cannot withdraw while you have active or pending loans"
         }
 
     # Can't withdraw more than group has
-    principal_available = min(ledger.net_principal, wallet.balance)
-    interest_available = ledger.net_interest
-    total_available = principal_available + interest_available
+    total_available = min(ledger.total_balance, wallet.balance)
 
     return {
-        "principal_available": principal_available,
-        "interest_available": interest_available,
         "total_available": total_available,
         "group_balance": wallet.balance,
         "member_net_principal": ledger.net_principal,
         "member_net_interest": ledger.net_interest,
+        "member_total_balance": ledger.total_balance,
         "has_active_loans": False
     }
 
@@ -303,9 +303,9 @@ def cancel_withdrawal_request(withdrawal_id, user_id):
 # ADDITIONAL HELPER FUNCTIONS FOR WITHDRAWAL SERVICE
 # ============================================================
 
-def validate_withdrawal_amounts(user_id, group_id, principal_amount, interest_amount=0):
+def validate_withdrawal_amount(user_id, group_id, total_amount):
     """
-    Validate withdrawal amounts before creating a request.
+    Validate withdrawal amount before creating a request.
 
     Returns: Tuple (is_valid, error_message)
     """
@@ -328,22 +328,17 @@ def validate_withdrawal_amounts(user_id, group_id, principal_amount, interest_am
         )
         return False, error_message
 
-    # Validate amounts
-    if principal_amount <= 0:
-        return False, "Principal amount must be greater than 0"
+    # Validate amount
+    if total_amount <= 0:
+        return False, "Amount must be greater than 0"
 
-    if principal_amount > ledger.net_principal:
-        return False, f"Insufficient principal balance. Available: ₹{ledger.net_principal}"
-
-    if interest_amount > ledger.net_interest:
-        return False, f"Insufficient interest balance. Available: ₹{ledger.net_interest}"
-
-    total_amount = principal_amount + interest_amount
+    if total_amount > ledger.total_balance:
+        return False, f"Insufficient balance. Available: ₹{ledger.total_balance}"
 
     if wallet.balance < total_amount:
         return False, f"Insufficient group balance. Required: ₹{total_amount}, Available: ₹{wallet.balance}"
 
-    return True, "Amounts are valid"
+    return True, "Amount is valid"
 
 
 def get_pending_withdrawal_for_user(user_id, group_id):
@@ -360,4 +355,3 @@ def get_pending_withdrawal_for_user(user_id, group_id):
             status=WithdrawalStatus.PENDING.value
         ).first()
     return None
-
