@@ -1,88 +1,52 @@
-"""
-WITHDRAWAL SERVICE
-==================
-
-Handles member withdrawals from groups.
-"""
+# =================
+# WITHDRAWAL SERVICE
+# ==================
 
 from datetime import datetime
 from app.extensions import db
-from app.models import (
-    WithdrawalRequest, Group, GroupMember, MemberLedger, GroupWallet,
-    WithdrawalStatus, MemberRole, LoanRequest, LoanStatus
-)
+from app.models import  WithdrawalRequest, WithdrawalStatus
 from app.services.authorization_service import (
     can_withdraw, can_approve_withdrawal, is_group_admin, AuthorizationError
 )
 import uuid
+# Import helper functions
+from app.services.helperfunctions import *
 
 
 class WithdrawalError(Exception):
     """Base exception for withdrawal operations"""
     pass
 
-
 # ============================================================
 # CREATE WITHDRAWAL REQUEST
 # ============================================================
 
-def create_withdrawal_request(user_id, group_id, principal_amount,
-                              interest_amount=0, withdrawal_type='principal_only',
+def create_withdrawal_request(user_id, group_id, principal_amount, interest_amount=0, withdrawal_type='principal_only',
                               membership_action='deactivate'):
-    """
-    Create a withdrawal request.
-
-    Args:
-        user_id: User requesting withdrawal
-        group_id: Group to withdraw from
-        principal_amount: Amount of principal to withdraw
-        interest_amount: Amount of interest to withdraw (optional)
-        withdrawal_type: 'principal_only' or 'with_interest'
-        membership_action: 'deactivate' or 'keep_active'
-
-    Returns: WithdrawalRequest
-    """
     try:
-        # Check authorization
+        # Check authorization - this already checks:
+        # 1. Membership
+        # 2. Active loans (using get_active_loans)
+        # 3. Wallet exists
+        # 4. Ledger exists with balance > 0
+        # 5. No pending withdrawals
         allowed, reason = can_withdraw(user_id, group_id)
         if not allowed:
             raise AuthorizationError(reason)
 
-        # Additional loan check for better error messages
-        active_loans = LoanRequest.query.filter(
-            LoanRequest.group_id == group_id,
-            LoanRequest.requested_by == user_id,
-            LoanRequest.is_active == True,
-            LoanRequest.status.in_([
-                LoanStatus.PENDING.value,
-                LoanStatus.APPROVED.value,
-                LoanStatus.DISBURSED.value
-            ])
-        ).all()
+        # NO NEED for duplicate loan check here - can_withdraw() already checked it
+        # NO NEED for duplicate wallet check here - can_withdraw() already checked it
+        # NO NEED for duplicate ledger check here - can_withdraw() already checked it
 
-        if active_loans:
-            # This check should already be covered by can_withdraw, but add specific message
-            loan_statuses = [loan.status for loan in active_loans]
-            if LoanStatus.PENDING.value in loan_statuses:
-                raise WithdrawalError("You cannot withdraw while you have a pending loan request")
-            elif LoanStatus.APPROVED.value in loan_statuses:
-                raise WithdrawalError("You cannot withdraw while you have an approved loan awaiting disbursement")
-            elif LoanStatus.DISBURSED.value in loan_statuses:
-                raise WithdrawalError("You cannot withdraw while you have an active loan. Repay loan first.")
+        # Get wallet and ledger for amount validations
+        # (Using helper functions for consistency)
+        wallet = get_group_wallet(group_id)
+        ledger = get_user_ledger_for_group(user_id, group_id, active_only=True)
 
-        # Get wallet and ledger
-        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
-        if not wallet:
-            raise WithdrawalError("Group wallet not found")
+        # Wallet and ledger are guaranteed to exist at this point because can_withdraw() passed
+        # But we still need them for amount validations
 
-        ledger = MemberLedger.query.filter_by(
-            wallet_id=wallet.id,
-            user_id=user_id
-        ).first()
-        if not ledger:
-            raise WithdrawalError("Member ledger not found")
-
-        # Validate amounts
+        # Validate amounts (NEW checks not in can_withdraw())
         if principal_amount <= 0:
             raise WithdrawalError("Principal amount must be greater than 0")
 
@@ -94,7 +58,7 @@ def create_withdrawal_request(user_id, group_id, principal_amount,
 
         total_amount = principal_amount + interest_amount
 
-        # Check group balance
+        # Check group balance (NEW check not in can_withdraw())
         if wallet.balance < total_amount:
             raise WithdrawalError(
                 f"Insufficient group balance. Required: ₹{total_amount}, Available: ₹{wallet.balance}")
@@ -145,20 +109,17 @@ def approve_withdrawal(withdrawal_id, admin_user_id):
         if not withdrawal:
             raise WithdrawalError("Withdrawal request not found")
 
-        # Additional loan check before approval
-        active_loans = LoanRequest.query.filter(
-            LoanRequest.group_id == withdrawal.group_id,
-            LoanRequest.requested_by == withdrawal.user_id,
-            LoanRequest.is_active == True,
-            LoanRequest.status.in_([
-                LoanStatus.PENDING.value,
-                LoanStatus.APPROVED.value,
-                LoanStatus.DISBURSED.value
-            ])
-        ).all()
+        # Check for active loans using helper function
+        active_loans = get_active_loans(withdrawal.user_id, withdrawal.group_id)
 
         if active_loans:
-            raise WithdrawalError("Member has pending or active loans. Cannot approve withdrawal.")
+            error_message = check_loans_and_get_message(
+                active_loans,
+                user_type="Member",
+                context_action="approve withdrawal"
+            )
+            if error_message:
+                raise WithdrawalError(error_message)
 
         # Approve the request
         withdrawal.approve(admin_user_id)
@@ -255,14 +216,11 @@ def get_withdrawable_amounts(user_id, group_id):
 
     Returns: Dict with withdrawable amounts
     """
-    wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+    wallet = get_group_wallet(group_id)
     if not wallet:
         return {"error": "Group wallet not found"}
 
-    ledger = MemberLedger.query.filter_by(
-        wallet_id=wallet.id,
-        user_id=user_id
-    ).first()
+    ledger = get_user_ledger_for_group(user_id, group_id, active_only=True)
 
     if not ledger:
         return {
@@ -272,20 +230,11 @@ def get_withdrawable_amounts(user_id, group_id):
             "group_balance": wallet.balance
         }
 
-    # Check if member has active loans
-    active_loans = LoanRequest.query.filter(
-        LoanRequest.group_id == group_id,
-        LoanRequest.requested_by == user_id,
-        LoanRequest.is_active == True,
-        LoanRequest.status.in_([
-            LoanStatus.PENDING.value,
-            LoanStatus.APPROVED.value,
-            LoanStatus.DISBURSED.value
-        ])
-    ).count()
+    # Check if member has active loans using helper function
+    active_loans = get_active_loans(user_id, group_id)
 
     # If member has active loans, they cannot withdraw
-    if active_loans > 0:
+    if active_loans:
         return {
             "principal_available": 0,
             "interest_available": 0,
@@ -348,3 +297,67 @@ def cancel_withdrawal_request(withdrawal_id, user_id):
     except Exception as e:
         db.session.rollback()
         raise WithdrawalError(f"Failed to cancel withdrawal: {str(e)}")
+
+
+# ============================================================
+# ADDITIONAL HELPER FUNCTIONS FOR WITHDRAWAL SERVICE
+# ============================================================
+
+def validate_withdrawal_amounts(user_id, group_id, principal_amount, interest_amount=0):
+    """
+    Validate withdrawal amounts before creating a request.
+
+    Returns: Tuple (is_valid, error_message)
+    """
+    # Get wallet and ledger using helper functions
+    wallet = get_group_wallet(group_id)
+    if not wallet:
+        return False, "Group wallet not found"
+
+    ledger = get_user_ledger_for_group(user_id, group_id, active_only=True)
+    if not ledger:
+        return False, "Member ledger not found"
+
+    # Check active loans
+    active_loans = get_active_loans(user_id, group_id)
+    if active_loans:
+        error_message = check_loans_and_get_message(
+            active_loans,
+            user_type="You",
+            context_action="withdraw"
+        )
+        return False, error_message
+
+    # Validate amounts
+    if principal_amount <= 0:
+        return False, "Principal amount must be greater than 0"
+
+    if principal_amount > ledger.net_principal:
+        return False, f"Insufficient principal balance. Available: ₹{ledger.net_principal}"
+
+    if interest_amount > ledger.net_interest:
+        return False, f"Insufficient interest balance. Available: ₹{ledger.net_interest}"
+
+    total_amount = principal_amount + interest_amount
+
+    if wallet.balance < total_amount:
+        return False, f"Insufficient group balance. Required: ₹{total_amount}, Available: ₹{wallet.balance}"
+
+    return True, "Amounts are valid"
+
+
+def get_pending_withdrawal_for_user(user_id, group_id):
+    """
+    Get pending withdrawal request for a user in a group.
+
+    Returns: WithdrawalRequest or None
+    """
+    # Check if user has pending withdrawals using helper function
+    if has_pending_withdrawals(user_id, group_id):
+        return WithdrawalRequest.query.filter_by(
+            user_id=user_id,
+            group_id=group_id,
+            status=WithdrawalStatus.PENDING.value
+        ).first()
+    return None
+

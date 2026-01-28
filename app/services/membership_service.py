@@ -4,19 +4,8 @@ MEMBERSHIP SERVICE
 
 Updated for withdrawal support and member dashboard.
 """
-import uuid
-from datetime import datetime
-from app.extensions import db
-from app.models import (
-    Group, GroupMember, AdminTransferHistory, WithdrawalRequest,
-    MemberRole, LoanRequest, LoanStatus, MemberLedger, MemberFinancialSummary,
-    WithdrawalStatus, GroupWallet, WalletTransaction, TransactionType
-)
-from app.services.authorization_service import (
-    can_leave_group, can_transfer_admin,
-    is_group_admin, AuthorizationError
-)
-
+from app.services.authorization_service import *
+from app.services.helperfunctions import *
 
 class MembershipError(Exception):
     """Base exception for membership operations"""
@@ -34,24 +23,16 @@ def add_member(group_id, user_id, added_by_user_id, role=MemberRole.MEMBER.value
         if not is_group_admin(added_by_user_id, group_id):
             raise AuthorizationError("Only admin can add members")
 
-        # Check if already active member
-        existing = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=user_id,
-            is_active=True
-        ).first()
+        # Check if already active member using helper
+        existing = get_membership(user_id, group_id)
 
         if existing:
             raise MembershipError("User is already an active member")
 
-        # Check for inactive membership (rejoining)
-        inactive_membership = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=user_id,
-            is_active=False
-        ).first()
+        # Check for inactive membership (rejoining) using helper
+        inactive_membership = get_membership_including_inactive(user_id, group_id)
 
-        if inactive_membership:
+        if inactive_membership and not inactive_membership.is_active:
             # Reactivate
             inactive_membership.reactivate()
             inactive_membership.role = role
@@ -77,7 +58,6 @@ def add_member(group_id, user_id, added_by_user_id, role=MemberRole.MEMBER.value
         raise MembershipError(f"Failed to add member: {str(e)}")
 
 
-
 # ============================================================
 # TRANSFER ADMIN RIGHTS
 # ============================================================
@@ -95,18 +75,12 @@ def transfer_admin(group_id, from_user_id, to_user_id, reason=None):
         if not allowed:
             raise AuthorizationError(error_reason)
 
-        # Get memberships
-        from_membership = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=from_user_id,
-            is_active=True
-        ).first()
+        # Get memberships using helper functions
+        from_membership = get_membership(from_user_id, group_id)
+        to_membership = get_membership(to_user_id, group_id)
 
-        to_membership = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=to_user_id,
-            is_active=True
-        ).first()
+        if not from_membership or not to_membership:
+            raise MembershipError("Member not found")
 
         # Transfer roles
         from_membership.role = MemberRole.MEMBER.value
@@ -151,12 +125,8 @@ def get_member_liabilities(user_id, group_id):
         'pending_withdrawals': []
     }
 
-    # Check pending withdrawal requests
-    pending_withdrawals = WithdrawalRequest.query.filter_by(
-        user_id=user_id,
-        group_id=group_id,
-        status=WithdrawalStatus.PENDING.value
-    ).all()
+    # Check pending withdrawal requests using helper
+    pending_withdrawals = get_pending_withdrawals(user_id, group_id)
 
     if pending_withdrawals:
         liabilities['can_leave'] = False
@@ -166,13 +136,8 @@ def get_member_liabilities(user_id, group_id):
             for w in pending_withdrawals
         ]
 
-    # Check pending loan requests
-    pending_loans = LoanRequest.query.filter_by(
-        group_id=group_id,
-        requested_by=user_id,
-        status=LoanStatus.PENDING.value,
-        is_active=True
-    ).all()
+    # Check pending loan requests using helper
+    pending_loans = get_pending_loans(user_id, group_id)
 
     if pending_loans:
         liabilities['can_leave'] = False
@@ -182,16 +147,8 @@ def get_member_liabilities(user_id, group_id):
             for l in pending_loans
         ]
 
-    # Check approved/disbursed loans
-    active_loans = LoanRequest.query.filter(
-        LoanRequest.group_id == group_id,
-        LoanRequest.requested_by == user_id,
-        LoanRequest.is_active == True,
-        LoanRequest.status.in_([
-            LoanStatus.APPROVED.value,
-            LoanStatus.DISBURSED.value
-        ])
-    ).all()
+    # Check approved/disbursed loans using helper
+    active_loans = get_active_loans_for_user_group(user_id, group_id)
 
     for loan in active_loans:
         remaining = loan.get_remaining_amount()
@@ -204,13 +161,8 @@ def get_member_liabilities(user_id, group_id):
                 'remaining': remaining
             })
 
-    # Check pending repayments
-    from app.models import LoanRepayment, RepaymentStatus
-    pending_repayments = LoanRepayment.query.join(LoanRequest).filter(
-        LoanRequest.group_id == group_id,
-        LoanRepayment.paid_by == user_id,
-        LoanRepayment.status == RepaymentStatus.PENDING.value
-    ).all()
+    # Check pending repayments using helper
+    pending_repayments = get_pending_repayments(user_id, group_id)
 
     if pending_repayments:
         liabilities['can_leave'] = False
@@ -221,6 +173,7 @@ def get_member_liabilities(user_id, group_id):
         ]
 
     return liabilities
+
 
 # ============================================================
 # LEAVE GROUP (CORRECTED WITH IMMEDIATE BALANCE UPDATE)
@@ -240,33 +193,22 @@ def leave_group(group_id, user_id, reason=None):
         if not allowed:
             raise AuthorizationError(error_reason)
 
-        # Get membership
-        membership = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=user_id,
-            is_active=True
-        ).first()
+        # Get membership using helper
+        membership = get_membership(user_id, group_id)
 
         if not membership:
             raise MembershipError("You are not a member of this group")
 
-        # Get wallet and check balance
-        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+        # Get wallet using helper
+        wallet = get_group_wallet(group_id)
         if not wallet:
             raise MembershipError("Group wallet not found")
 
-        # Get ACTIVE ledger only
-        ledger = MemberLedger.query.filter_by(
-            wallet_id=wallet.id,
-            user_id=user_id,
-            is_active=True
-        ).first()
+        # Get ACTIVE ledger only using helper
+        ledger = get_user_ledger_for_group(user_id, group_id, active_only=True)
 
-        # Check if this is the last member leaving
-        active_members_count = GroupMember.query.filter_by(
-            group_id=group_id,
-            is_active=True
-        ).count()
+        # Check if this is the last member leaving using helper
+        active_members_count = get_active_members_count(group_id)
 
         # Special case: If this is the only member AND wallet balance is zero
         # Allow leaving without withdrawal check
@@ -307,6 +249,7 @@ def leave_group(group_id, user_id, reason=None):
         db.session.rollback()
         raise MembershipError(f"Failed to leave group: {str(e)}")
 
+
 # ============================================================
 # REMOVE MEMBER (WITH IMMEDIATE BALANCE UPDATE)
 # ============================================================
@@ -323,12 +266,8 @@ def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
         if not is_group_admin(admin_user_id, group_id):
             raise AuthorizationError("Only admin can remove members")
 
-        # Check if member exists and is active
-        membership = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=user_id,
-            is_active=True
-        ).first()
+        # Check if member exists and is active using helper
+        membership = get_membership(user_id, group_id)
 
         if not membership:
             raise MembershipError("Member not found or already inactive")
@@ -338,30 +277,15 @@ def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
             raise AuthorizationError("Cannot remove yourself as admin. Use 'Leave Group' instead.")
 
         # ========== CHECK FOR ACTIVE LOANS (SAME AS LEAVE_GROUP) ==========
-        from app.models import LoanRepayment, RepaymentStatus
-
-        # Check pending loan requests
-        pending_loans = LoanRequest.query.filter_by(
-            group_id=group_id,
-            requested_by=user_id,
-            status=LoanStatus.PENDING.value,
-            is_active=True
-        ).all()
+        # Check pending loan requests using helper
+        pending_loans = get_pending_loans(user_id, group_id)
 
         if pending_loans:
             loan_ids = ', '.join(str(l.id) for l in pending_loans)
             raise MembershipError(f"Cannot remove member - they have pending loan requests (IDs: {loan_ids})")
 
-        # Check approved/disbursed loans
-        active_loans = LoanRequest.query.filter(
-            LoanRequest.group_id == group_id,
-            LoanRequest.requested_by == user_id,
-            LoanRequest.is_active == True,
-            LoanRequest.status.in_([
-                LoanStatus.APPROVED.value,
-                LoanStatus.DISBURSED.value
-            ])
-        ).all()
+        # Check approved/disbursed loans using helper
+        active_loans = get_active_loans_for_user_group(user_id, group_id)
 
         for loan in active_loans:
             remaining = loan.get_remaining_amount()
@@ -371,23 +295,16 @@ def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
                     f"Loan ID: {loan.id}"
                 )
 
-        # Check pending repayments
-        pending_repayments = LoanRepayment.query.join(LoanRequest).filter(
-            LoanRequest.group_id == group_id,
-            LoanRepayment.paid_by == user_id,
-            LoanRepayment.status == RepaymentStatus.PENDING.value
-        ).all()
+        # Check pending repayments using helper
+        pending_repayments = get_pending_repayments(user_id, group_id)
 
         if pending_repayments:
             repayment_ids = ', '.join(str(r.id) for r in pending_repayments)
             raise MembershipError(f"Cannot remove member - they have pending repayments (IDs: {repayment_ids})")
 
         # ========== CHECK FOR PENDING WITHDRAWAL REQUESTS ==========
-        pending_withdrawals = WithdrawalRequest.query.filter_by(
-            user_id=user_id,
-            group_id=group_id,
-            status=WithdrawalStatus.PENDING.value
-        ).all()
+        # Using helper function
+        pending_withdrawals = get_pending_withdrawals(user_id, group_id)
 
         if pending_withdrawals:
             withdrawal_ids = ', '.join(str(w.id) for w in pending_withdrawals)
@@ -395,17 +312,13 @@ def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
                 f"Cannot remove member - they have pending withdrawal requests (IDs: {withdrawal_ids})")
         # ========== END OF LOAN/WITHDRAWAL CHECKS ==========
 
-        # Get wallet
-        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+        # Get wallet using helper
+        wallet = get_group_wallet(group_id)
         if not wallet:
             raise MembershipError("Group wallet not found")
 
-        # Get member's ACTIVE ledger
-        ledger = MemberLedger.query.filter_by(
-            wallet_id=wallet.id,
-            user_id=user_id,
-            is_active=True  # Only active ledger
-        ).first()
+        # Get member's ACTIVE ledger using helper
+        ledger = get_user_ledger_for_group(user_id, group_id, active_only=True)
 
         # Store member's principal balance for withdrawal
         principal_amount = 0
@@ -493,6 +406,7 @@ def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
         db.session.rollback()
         raise MembershipError(f"Failed to remove member: {str(e)}")
 
+
 # ============================================================
 # REJOIN GROUP (CORRECTED - CREATES NEW LEDGER)
 # ============================================================
@@ -502,24 +416,16 @@ def rejoin_group(user_id, group_id, contribution_amount=0):
     Resets the existing ledger for fresh start (keeps same record, resets values).
     """
     try:
-        # Check if already active member
-        existing = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=user_id,
-            is_active=True
-        ).first()
+        # Check if already active member using helper
+        existing = get_membership(user_id, group_id)
 
         if existing:
             raise MembershipError("User is already an active member of this group")
 
-        # Find inactive membership
-        inactive_membership = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=user_id,
-            is_active=False
-        ).first()
+        # Find inactive membership using helper
+        inactive_membership = get_membership_including_inactive(user_id, group_id)
 
-        if inactive_membership:
+        if inactive_membership and not inactive_membership.is_active:
             # Reactivate
             inactive_membership.reactivate()
             membership = inactive_membership
@@ -532,16 +438,13 @@ def rejoin_group(user_id, group_id, contribution_amount=0):
             )
             db.session.add(membership)
 
-        # Get wallet
-        wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+        # Get wallet using helper
+        wallet = get_group_wallet(group_id)
         if not wallet:
             raise MembershipError("Group wallet not found")
 
-        # Find existing ledger (active or inactive)
-        ledger = MemberLedger.query.filter_by(
-            wallet_id=wallet.id,
-            user_id=user_id
-        ).first()
+        # Find existing ledger (active or inactive) using helper
+        ledger = get_user_ledger_for_group(user_id, group_id, active_only=False)
 
         if ledger:
             # RESET THE EXISTING LEDGER for fresh start
@@ -593,6 +496,8 @@ def rejoin_group(user_id, group_id, contribution_amount=0):
     except Exception as e:
         db.session.rollback()
         raise MembershipError(f"Failed to rejoin group: {str(e)}")
+
+
 # ============================================================
 # GET MEMBER GROUP FINANCIAL SUMMARY (UPDATED)
 # ============================================================
@@ -602,38 +507,25 @@ def get_member_group_financial_summary(user_id, group_id):
     Get member's financial summary for a specific group.
     Returns ACTIVE ledger only.
     """
-    wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+    # Get wallet using helper
+    wallet = get_group_wallet(group_id)
     if not wallet:
         return {"error": "Group wallet not found"}
 
-    # Get ACTIVE ledger only
-    ledger = MemberLedger.query.filter_by(
-        wallet_id=wallet.id,
-        user_id=user_id,
-        is_active=True
-    ).first()
+    # Get ACTIVE ledger only using helper
+    ledger = get_user_ledger_for_group(user_id, group_id, active_only=True)
 
     if not ledger:
         return {
             'has_ledger': False,
-            'is_active_member': GroupMember.query.filter_by(
-                group_id=group_id,
-                user_id=user_id,
-                is_active=True
-            ).first() is not None
+            'is_active_member': get_membership(user_id, group_id) is not None
         }
 
-    membership = GroupMember.query.filter_by(
-        group_id=group_id,
-        user_id=user_id,
-        is_active=True
-    ).first()
+    # Get membership using helper
+    membership = get_membership(user_id, group_id)
 
-    # Get withdrawal history
-    withdrawals = WithdrawalRequest.query.filter_by(
-        user_id=user_id,
-        group_id=group_id
-    ).order_by(WithdrawalRequest.created_at.desc()).all()
+    # Get withdrawal history using helper
+    withdrawals = get_user_withdrawals(user_id, group_id)
 
     return {
         'has_ledger': True,

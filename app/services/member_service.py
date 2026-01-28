@@ -1,17 +1,7 @@
-"""
-MEMBER SERVICE
-==============
-
-Handles member-specific operations and dashboard data.
-"""
-
 from datetime import datetime
 from app.extensions import db
-from app.models import (
-    User, Group, GroupMember, MemberLedger, MemberFinancialSummary,
-    LoanRequest, LoanRepayment, WithdrawalRequest, GroupWallet
-)
-
+from app.models import  Group,MemberFinancialSummary
+from app.services.helperfunctions import *
 
 # ============================================================
 # GET MEMBER DASHBOARD
@@ -33,14 +23,11 @@ def get_member_dashboard(user_id):
         db.session.commit()
         summary = MemberFinancialSummary.query.filter_by(user_id=user_id).first()
 
-    # Get all memberships
-    memberships = GroupMember.query.filter_by(
-        user_id=user_id,
-        is_active=True
-    ).all()
+    # Get all memberships using helper
+    memberships = get_user_memberships(user_id, is_active=True)
 
-    # Get all ledgers
-    ledgers = MemberLedger.query.filter_by(user_id=user_id).all()
+    # Get all ledgers using helper
+    ledgers = get_user_ledgers(user_id)
 
     dashboard = {
         'user_id': user_id,
@@ -81,6 +68,7 @@ def get_member_dashboard(user_id):
 
     # Add group details for active memberships without ledger (new members)
     for membership in memberships:
+        # Check if ledger exists for this group
         ledger_exists = any(l.wallet.group_id == membership.group_id for l in ledgers)
         if not ledger_exists:
             group = Group.query.get(membership.group_id)
@@ -110,11 +98,8 @@ def get_member_loans_summary(user_id):
     """
     Get summary of loans taken by member.
     """
-    # Loans where member is borrower
-    loan_requests = LoanRequest.query.filter_by(
-        requested_by=user_id,
-        is_active=True
-    ).all()
+    # Loans where member is borrower using helper
+    loan_requests = get_user_loans(user_id, is_active=True)
 
     summary = {
         'total_loans': len(loan_requests),
@@ -162,12 +147,8 @@ def get_member_lending_summary(user_id):
     """
     Get summary of lending (interest earned from other members' loans).
     """
-    from app.models import InterestDistribution
-
-    # Get interest distributions to this member
-    interest_distributions = InterestDistribution.query.filter_by(
-        beneficiary_id=user_id
-    ).all()
+    # Get interest distributions to this member using helper
+    interest_distributions = get_interest_distributions_to_user(user_id)
 
     summary = {
         'total_interest_earned': 0,
@@ -202,9 +183,8 @@ def get_member_withdrawal_history(user_id):
     """
     Get withdrawal history for a member across all groups.
     """
-    withdrawals = WithdrawalRequest.query.filter_by(
-        user_id=user_id
-    ).order_by(WithdrawalRequest.created_at.desc()).all()
+    # Get all withdrawals using helper
+    withdrawals = get_user_withdrawals(user_id)
 
     history = []
 
@@ -236,14 +216,13 @@ def get_member_group_details(user_id, group_id):
     """
     Get detailed financial information for a member in a specific group.
     """
-    wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+    # Get group wallet using helper
+    wallet = get_group_wallet(group_id)
     if not wallet:
         return {"error": "Group wallet not found"}
 
-    ledger = MemberLedger.query.filter_by(
-        wallet_id=wallet.id,
-        user_id=user_id
-    ).first()
+    # Get member ledger using helper
+    ledger = get_user_ledger_for_group(user_id, group_id)
 
     if not ledger:
         return {
@@ -252,26 +231,14 @@ def get_member_group_details(user_id, group_id):
             'group_balance': wallet.balance
         }
 
-    # Get contributions
-    from app.models import MemberContribution
-    contributions = MemberContribution.query.filter_by(
-        wallet_id=wallet.id,
-        user_id=user_id
-    ).order_by(MemberContribution.contributed_at.desc()).all()
+    # Get contributions using helper
+    contributions = get_user_contributions(user_id, wallet.id)
 
-    # Get interest distributions
-    from app.models import InterestDistribution, LoanRequest
-    interest_distributions = InterestDistribution.query.join(LoanRequest).filter(
-        InterestDistribution.beneficiary_id == user_id,
-        LoanRequest.group_id == group_id
-    ).order_by(InterestDistribution.created_at.desc()).all()
+    # Get interest distributions using helper
+    interest_distributions = get_interest_distributions_to_user(user_id, group_id)
 
-    # Get loans as borrower
-    loans_as_borrower = LoanRequest.query.filter_by(
-        group_id=group_id,
-        requested_by=user_id,
-        is_active=True
-    ).order_by(LoanRequest.created_at.desc()).all()
+    # Get loans as borrower using helper
+    loans_as_borrower = get_user_loans_for_group(user_id, group_id)
 
     return {
         'has_ledger': True,

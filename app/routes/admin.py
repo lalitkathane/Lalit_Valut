@@ -1,10 +1,8 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
-from app.models import (
-    Group, GroupMember, LoanRequest, LoanRepayment,
-    LoanStatus, RepaymentStatus, MemberRole
-)
+from app.models import Group, GroupMember, MemberRole
 from app.services.authorization_service import is_group_admin
+from app.services.helperfunctions import *
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -13,52 +11,18 @@ admin_bp = Blueprint('admin', __name__)
 @admin_bp.route('/groups/<int:group_id>/admin')
 @login_required
 def admin_dashboard(group_id):
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
-    if not is_group_admin(current_user.id, group_id):
-        flash('Admin access required!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group_id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
-
-    # Pending loan approvals (waiting for votes)
-    pending_loans = LoanRequest.query.filter_by(
-        group_id=group_id,
-        status=LoanStatus.PENDING.value,
-        is_active=True
-    ).all()
-
-    # Approved loans awaiting disbursement
-    awaiting_disbursement = LoanRequest.query.filter_by(
-        group_id=group_id,
-        status=LoanStatus.APPROVED.value,
-        is_active=True
-    ).filter(LoanRequest.disbursed_at.is_(None)).all()
-
-    # Pending repayment approvals
-    pending_repayments = LoanRepayment.query.join(LoanRequest).filter(
-        LoanRequest.group_id == group_id,
-        LoanRepayment.status == RepaymentStatus.PENDING.value
-    ).all()
-
-    # Active loans (disbursed, not completed)
-    active_loans = LoanRequest.query.filter_by(
-        group_id=group_id,
-        status=LoanStatus.DISBURSED.value,
-        is_active=True
-    ).all()
-
-    # Member count
-    member_count = GroupMember.query.filter_by(
-        group_id=group_id,
-        is_active=True
-    ).count()
-
-    # Other admins
-    admins = GroupMember.query.filter_by(
-        group_id=group_id,
-        role=MemberRole.ADMIN.value,
-        is_active=True
-    ).all()
-
+    pending_loans = get_pending_loans_for_group(group_id)
+    awaiting_disbursement = get_approved_loans_pending_disbursement(group_id)
+    pending_repayments = get_pending_repayments_for_group(group_id)
+    active_loans = get_active_loans_for_group(group_id)
+    member_count = get_active_members_count(group_id)
+    admins = get_admin_members(group_id)
     return render_template(
         'admin/dashboard.html',
         group=group,
@@ -75,17 +39,14 @@ def admin_dashboard(group_id):
 @admin_bp.route('/groups/<int:group_id>/admin/repayments')
 @login_required
 def pending_repayments(group_id):
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
-    if not is_group_admin(current_user.id, group_id):
-        flash('Admin access required!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group_id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
 
-    # Get all pending repayments with loan details
-    repayments = LoanRepayment.query.join(LoanRequest).filter(
-        LoanRequest.group_id == group_id,
-        LoanRepayment.status == RepaymentStatus.PENDING.value
-    ).order_by(LoanRepayment.submitted_at.asc()).all()
+    repayments = get_pending_repayments_for_group(group_id)
 
     return render_template(
         'admin/pending_repayments.html',
@@ -98,12 +59,14 @@ def pending_repayments(group_id):
 @admin_bp.route('/admin/repayments/<int:repayment_id>')
 @login_required
 def repayment_detail(repayment_id):
+    from app.models import LoanRepayment
     repayment = LoanRepayment.query.get_or_404(repayment_id)
     loan = repayment.loan
     group = loan.group
 
-    if not is_group_admin(current_user.id, group.id):
-        flash('Admin access required!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group.id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('loans.view_loan', loan_id=loan.id))
 
     return render_template(
@@ -118,17 +81,14 @@ def repayment_detail(repayment_id):
 @admin_bp.route('/groups/<int:group_id>/admin/transfer-history')
 @login_required
 def transfer_history(group_id):
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
-    if not is_group_admin(current_user.id, group_id):
-        flash('Admin access required!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group_id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
 
-    from app.models import AdminTransferHistory
-
-    transfers = AdminTransferHistory.query.filter_by(
-        group_id=group_id
-    ).order_by(AdminTransferHistory.transferred_at.desc()).all()
+    transfers = get_admin_transfer_history(group_id)
 
     return render_template(
         'admin/transfer_history.html',
@@ -137,25 +97,19 @@ def transfer_history(group_id):
     )
 
 
-# Add these new routes to admin.py
-
 # ============== PENDING WITHDRAWALS ==============
 @admin_bp.route('/groups/<int:group_id>/admin/withdrawals')
 @login_required
 def pending_withdrawals(group_id):
     """View pending withdrawal requests"""
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
-    if not is_group_admin(current_user.id, group_id):
-        flash('Admin access required!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group_id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
 
-    from app.models import WithdrawalRequest, WithdrawalStatus
-
-    withdrawals = WithdrawalRequest.query.filter_by(
-        group_id=group_id,
-        status=WithdrawalStatus.PENDING.value
-    ).order_by(WithdrawalRequest.created_at.desc()).all()
+    withdrawals = get_pending_withdrawals_for_group(group_id)
 
     return render_template(
         'admin/pending_withdrawals.html',
@@ -173,16 +127,12 @@ def withdrawal_detail(withdrawal_id):
     withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
     group = withdrawal.group
 
-    if not is_group_admin(current_user.id, group.id):
-        flash('Admin access required!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group.id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group.id))
 
-    # Get member ledger details
-    from app.models import MemberLedger
-    ledger = MemberLedger.query.filter_by(
-        wallet_id=group.wallet.id,
-        user_id=withdrawal.user_id
-    ).first()
+    ledger = get_member_ledger_for_group(withdrawal.user_id, group.id)
 
     return render_template(
         'admin/withdrawal_detail.html',
@@ -201,8 +151,9 @@ def approve_withdrawal_route(withdrawal_id):
     withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
     group = withdrawal.group
 
-    if not is_group_admin(current_user.id, group.id):
-        flash('Admin access required!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group.id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group.id))
 
     try:
@@ -224,8 +175,9 @@ def reject_withdrawal_route(withdrawal_id):
     withdrawal = WithdrawalRequest.query.get_or_404(withdrawal_id)
     group = withdrawal.group
 
-    if not is_group_admin(current_user.id, group.id):
-        flash('Admin access required!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group.id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group.id))
 
     try:

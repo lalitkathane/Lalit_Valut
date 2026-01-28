@@ -6,7 +6,7 @@ Uses loan_service for all operations.
 Implements strict state machine.
 """
 from datetime import datetime
-
+import time
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from app.extensions import db
@@ -22,18 +22,28 @@ from app.services.authorization_service import (
     can_vote, can_repay, is_group_member, is_group_admin, AuthorizationError
 )
 from app.services.wallet_service import submit_repayment, WalletError
+from app.helperfunctions import (
+    validate_loan_creation_data,
+    get_loan_view_data,
+    validate_repayment_amount,
+    get_repayment_form_data,
+    get_my_loans_data,
+    get_emi_schedule_data,
+    get_loan_audit_data,
+    validate_loan_edit_data,
+    get_loan_list_data,
+    get_group_or_404
+)
 
 loans_bp = Blueprint('loans', __name__)
 
 
 # ============== CREATE LOAN REQUEST ==============
-# Update the create_loan function in loans_new.py:
-
 @loans_bp.route('/groups/<int:group_id>/loans/create', methods=['GET', 'POST'])
 @login_required
 def create_loan(group_id):
     """Create a new loan request in a group"""
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
     if not is_group_member(current_user.id, group_id):
         flash('You are not a member of this group!', 'danger')
@@ -45,26 +55,15 @@ def create_loan(group_id):
             reason = request.form.get('reason', '').strip()
             loan_duration = request.form.get('loan_duration', group.default_loan_duration_months, type=int)
 
-            # VALIDATE MINIMUM EMI DURATION
-            if loan_duration < group.min_emi_duration_months:
-                flash(f'Loan duration must be at least {group.min_emi_duration_months} months (group policy)!',
-                      'danger')
-                return render_template('loans/create.html', group=group)
-
-            # Validate positive whole number
-            if amount <= 0:
-                flash('Please enter a valid amount greater than zero!', 'danger')
-                return render_template('loans/create.html', group=group)
-
-            if amount != int(amount):
-                flash('Please enter a whole number (no decimals allowed)!', 'danger')
+            # Validate loan creation data
+            is_valid, error_msg = validate_loan_creation_data(
+                amount, reason, group.min_emi_duration_months, loan_duration
+            )
+            if not is_valid:
+                flash(error_msg, 'danger')
                 return render_template('loans/create.html', group=group)
 
             amount = int(amount)  # Convert to integer
-            if not reason:
-                flash('Please provide a reason for the loan request!', 'danger')
-                return render_template('loans/create.html', group=group)
-
             loan = create_loan_request(
                 group_id=group_id,
                 user_id=current_user.id,
@@ -86,15 +85,12 @@ def create_loan(group_id):
 
 
 # ============== VIEW LOAN DETAILS ==============
-# Update the view_loan function in loans_new.py:
-
 @loans_bp.route('/loans/<int:loan_id>')
 @login_required
 def view_loan(loan_id):
     """View detailed information about a loan"""
     # Force a fresh query from database
     loan = LoanRequest.query.get_or_404(loan_id)
-    group = loan.group
 
     if not is_group_member(current_user.id, loan.group_id):
         flash('You are not a member of this group!', 'danger')
@@ -103,100 +99,12 @@ def view_loan(loan_id):
     # IMPORTANT: Refresh the loan object to get latest data
     db.session.refresh(loan)
 
-    details = get_loan_details(loan_id)
-    can_vote_result, vote_reason = can_vote(current_user.id, loan_id)
+    # Get all loan view data using helper
+    loan_data = get_loan_view_data(loan_id, current_user.id)
 
-    user_vote = LoanApproval.query.filter_by(
-        loan_id=loan_id,
-        user_id=current_user.id
-    ).first()
+    return render_template('loans/detail.html', **loan_data)
 
-    all_votes = LoanApproval.query.filter_by(loan_id=loan_id).all()
-    can_repay_result, _ = can_repay(current_user.id, loan_id)
-    is_admin = is_group_admin(current_user.id, loan.group_id)
 
-    # Check if admin can perform final approval
-    can_final_approve = (
-            is_admin and
-            loan.status == LoanStatus.PRE_APPROVED.value and
-            loan.requested_by != current_user.id
-    )
-
-    # Get pending repayments for admin
-    pending_repayments = []
-    if is_admin:
-        pending_repayments = LoanRepayment.query.filter_by(
-            loan_id=loan_id,
-            status=RepaymentStatus.PENDING.value
-        ).all()
-
-    today = datetime.utcnow().date()
-
-    # NEW: Check if borrower has ANY repayment (pending OR approved) this month
-    has_repayment_this_month = False
-    if not is_admin and current_user.id == loan.requested_by:
-        current_month = datetime.utcnow().month
-        current_year = datetime.utcnow().year
-
-        # Check for ANY repayment this month (pending OR approved)
-        repayment_this_month = LoanRepayment.query.filter(
-            LoanRepayment.loan_id == loan_id,
-            LoanRepayment.paid_by == current_user.id,
-            db.extract('month', LoanRepayment.submitted_at) == current_month,
-            db.extract('year', LoanRepayment.submitted_at) == current_year
-        ).first()
-
-        has_repayment_this_month = repayment_this_month is not None
-
-    # Calculate vote progress percentage
-    vote_progress = 0
-    if loan.status == LoanStatus.PENDING.value and details.get('voting'):
-        voting_dict = details.get('voting', {})
-        required_approvals = voting_dict.get('required_approvals', 1)
-        approvals = voting_dict.get('approvals', 0)
-        vote_progress = (approvals / required_approvals * 100) if required_approvals > 0 else 0
-
-    # Calculate repayment progress percentage
-    repay_progress = 0
-    if loan.total_repayable and loan.total_repayable > 0:
-        repay_progress = (loan.total_repaid / loan.total_repayable * 100) if loan.total_repaid else 0
-        repay_progress = min(100, repay_progress)  # Cap at 100%
-
-    # Calculate days until next EMI (if applicable)
-    days_left = 0
-    if loan.status == LoanStatus.DISBURSED.value and details.get('next_emi'):
-        # FIXED: Handle both dictionary and object access
-        next_emi = details['next_emi']
-        if isinstance(next_emi, dict):
-            due_date = next_emi.get('due_date')
-        else:
-            # If it's an EMISchedule object
-            due_date = getattr(next_emi, 'due_date', None)
-
-        if due_date:
-            days_left = (due_date - today).days
-            days_left = max(0, days_left)
-
-    return render_template(
-        'loans/detail.html',
-        loan=loan,
-        group=group,
-        details=details,
-        can_vote=can_vote_result,
-        vote_reason=vote_reason,
-        user_vote=user_vote,
-        all_votes=all_votes,
-        can_repay=can_repay_result,
-        is_admin=is_admin,
-        can_final_approve=can_final_approve,
-        pending_repayments=pending_repayments,
-        today=today,
-        vote_progress=vote_progress,
-        repay_progress=repay_progress,
-        days_left=days_left,
-        now=datetime.utcnow(),
-        has_repayment_this_month=has_repayment_this_month  # NEW: Pass this to template
-    )
 # ============== FINAL ADMIN APPROVAL ==============
 @loans_bp.route('/loans/<int:loan_id>/final-approve', methods=['POST'])
 @login_required
@@ -229,7 +137,7 @@ def final_approve_loan(loan_id):
 @login_required
 def list_loans(group_id):
     """List all loans in a group with optional status filter"""
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
     if not is_group_member(current_user.id, group_id):
         flash('You are not a member of this group!', 'danger')
@@ -238,12 +146,8 @@ def list_loans(group_id):
     # Filter by status if provided
     status_filter = request.args.get('status', None)
 
-    query = LoanRequest.query.filter_by(group_id=group_id, is_active=True)
-
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-
-    loans = query.order_by(LoanRequest.created_at.desc()).all()
+    # Get loans using helper
+    loans = get_loan_list_data(group_id, status_filter)
 
     return render_template(
         'loans/list.html',
@@ -300,119 +204,32 @@ def vote_loan(loan_id):
 @login_required
 def my_loans():
     """Personal dashboard showing user's loans and pending actions"""
-    # Get all loans requested by current user
-    my_requests = LoanRequest.query.filter_by(
-        requested_by=current_user.id,
-        is_active=True
-    ).order_by(LoanRequest.created_at.desc()).all()
+    # Get data using helper
+    loans_data = get_my_loans_data(current_user.id)
 
-    # Get pending votes (loans in user's groups that need voting)
-    pending_votes = []
-    memberships = current_user.get_active_memberships().all()
-
-    for membership in memberships:
-        group_loans = LoanRequest.query.filter_by(
-            group_id=membership.group_id,
-            status=LoanStatus.PENDING.value,
-            is_active=True
-        ).all()
-
-        for loan in group_loans:
-            if loan.requested_by == current_user.id:
-                continue
-
-            existing_vote = LoanApproval.query.filter_by(
-                loan_id=loan.id,
-                user_id=current_user.id
-            ).first()
-
-            if not existing_vote:
-                pending_votes.append(loan)
-
-    # Get my pending repayments (repayments I submitted awaiting admin approval)
-    my_pending_repayments = LoanRepayment.query.filter_by(
-        paid_by=current_user.id,
-        status=RepaymentStatus.PENDING.value
-    ).all()
-
-    return render_template(
-        'loans/my_loans.html',
-        my_requests=my_requests,
-        pending_votes=pending_votes,
-        my_pending_repayments=my_pending_repayments,
-        today=datetime.utcnow()
-    )
+    return render_template('loans/my_loans.html', **loans_data)
 
 
 # ============== SUBMIT REPAYMENT ==============
-# In loans.py, update the repay_loan function to hide when fully repaid:
-
-# Update the repay_loan function in loans_new.py:
-
 @loans_bp.route('/loans/<int:loan_id>/repay', methods=['GET', 'POST'])
 @login_required
 def repay_loan(loan_id):
     """Submit a repayment for a loan - WITH EMI RESTRICTIONS"""
-    loan = LoanRequest.query.get_or_404(loan_id)
+    # Get repayment form data using helper
+    form_data, error_msg = get_repayment_form_data(loan_id, current_user.id)
 
-    # Check if loan is fully repaid
-    if loan.is_fully_repaid():
-        flash('This loan has already been fully repaid!', 'info')
+    if error_msg:
+        flash(error_msg, 'warning' if 'already submitted' in error_msg else 'info')
         return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
-    # NEW: Check if user has already submitted ANY repayment for this month
-    current_month = datetime.utcnow().month
-    current_year = datetime.utcnow().year
-
-    repayment_this_month = LoanRepayment.query.filter(
-        LoanRepayment.loan_id == loan_id,
-        LoanRepayment.paid_by == current_user.id,
-        db.extract('month', LoanRepayment.submitted_at) == current_month,
-        db.extract('year', LoanRepayment.submitted_at) == current_year
-    ).first()
-
-    if repayment_this_month:
-        flash('You have already submitted a repayment for this month! You can only make one payment per month.', 'warning')
-        return redirect(url_for('loans.view_loan', loan_id=loan_id))
-
-    group = loan.group
+    loan = form_data['loan']
+    group = form_data['group']
 
     # Check authorization
     allowed, reason = can_repay(current_user.id, loan_id)
     if not allowed:
         flash(reason, 'danger')
         return redirect(url_for('loans.view_loan', loan_id=loan_id))
-
-    # Get EMI schedule if applicable
-    emi_schedule = []
-    next_emi = None
-    if loan.repayment_type == 'emi':
-        emi_schedule = EMISchedule.query.filter_by(loan_id=loan_id).order_by(
-            EMISchedule.installment_number
-        ).all()
-        # Find next unpaid EMI
-        next_emi = EMISchedule.query.filter_by(
-            loan_id=loan_id,
-            is_paid=False
-        ).order_by(EMISchedule.installment_number).first()
-
-    remaining_amount = loan.get_remaining_amount()
-
-    # NEW: Calculate paid EMIs and remaining EMIs
-    paid_emis = 0
-    remaining_emis = 0
-    can_make_full_payment = False
-
-    if loan.loan_duration_months and loan.repayment_type == 'emi':
-        paid_emis = EMISchedule.query.filter_by(
-            loan_id=loan_id,
-            is_paid=True
-        ).count()
-
-        remaining_emis = loan.loan_duration_months - paid_emis
-
-        # FIXED: Can make full payment if paid EMIs >= minimum EMI duration
-        can_make_full_payment = paid_emis >= group.min_emi_duration_months
 
     if request.method == 'POST':
         try:
@@ -423,64 +240,17 @@ def repay_loan(loan_id):
                 amount = float(amount_str)
             except ValueError:
                 flash('Please enter a valid amount!', 'danger')
-                return render_template('loans/repay.html',
-                                       loan=loan, group=group, remaining_amount=remaining_amount,
-                                       emi_schedule=emi_schedule, next_emi=next_emi,
-                                       paid_emis=paid_emis, remaining_emis=remaining_emis,
-                                       can_make_full_payment=can_make_full_payment)
+                return render_template('loans/repay.html', **form_data)
 
-            # Validate positive amount
-            if amount <= 0:
-                flash('Please enter a valid amount greater than zero!', 'danger')
-                return render_template('loans/repay.html',
-                                       loan=loan, group=group, remaining_amount=remaining_amount,
-                                       emi_schedule=emi_schedule, next_emi=next_emi,
-                                       paid_emis=paid_emis, remaining_emis=remaining_emis,
-                                       can_make_full_payment=can_make_full_payment)
-
-            # Check if amount is a whole number
-            if not amount.is_integer():
-                flash('Repayment amount must be a whole number (no decimals allowed)!', 'danger')
-                return render_template('loans/repay.html',
-                                       loan=loan, group=group, remaining_amount=remaining_amount,
-                                       emi_schedule=emi_schedule, next_emi=next_emi,
-                                       paid_emis=paid_emis, remaining_emis=remaining_emis,
-                                       can_make_full_payment=can_make_full_payment)
+            # Validate repayment amount using helper
+            is_valid, error_msg = validate_repayment_amount(
+                amount, loan, group, form_data['paid_emis']
+            )
+            if not is_valid:
+                flash(error_msg, 'danger')
+                return render_template('loans/repay.html', **form_data)
 
             amount = int(amount)
-
-            # NEW: PREVENT FULL PAYMENT IF MINIMUM EMI DURATION NOT MET
-            if loan.loan_duration_months and loan.repayment_type == 'emi':
-
-                # Check if trying to pay more than next EMI
-                if amount > loan.emi_amount:
-                    # Check if trying to pay full amount before minimum EMI duration
-                    if amount >= remaining_amount:
-                        if can_make_full_payment:
-                            # Allow full payment
-                            pass
-                        else:
-                            flash(f'You must complete at least {group.min_emi_duration_months} EMIs before making full payment. You have paid {paid_emis} EMIs so far.', 'danger')
-                            return render_template('loans/repay.html',
-                                                   loan=loan, group=group, remaining_amount=remaining_amount,
-                                                   emi_schedule=emi_schedule, next_emi=next_emi,
-                                                   paid_emis=paid_emis, remaining_emis=remaining_emis,
-                                                   can_make_full_payment=can_make_full_payment)
-                    else:
-                        flash(f'You can only pay one EMI at a time (₹{loan.emi_amount:,}). Minimum EMI duration is {group.min_emi_duration_months} months.', 'danger')
-                        return render_template('loans/repay.html',
-                                               loan=loan, group=group, remaining_amount=remaining_amount,
-                                               emi_schedule=emi_schedule, next_emi=next_emi,
-                                               paid_emis=paid_emis, remaining_emis=remaining_emis,
-                                               can_make_full_payment=can_make_full_payment)
-                elif amount < loan.emi_amount:
-                    flash(f'Minimum payment is one EMI (₹{loan.emi_amount:,})', 'danger')
-                    return render_template('loans/repay.html',
-                                           loan=loan, group=group, remaining_amount=remaining_amount,
-                                           emi_schedule=emi_schedule, next_emi=next_emi,
-                                           paid_emis=paid_emis, remaining_emis=remaining_emis,
-                                           can_make_full_payment=can_make_full_payment)
-
             description = request.form.get('description', '').strip()
             emi_id = request.form.get('emi_id', type=int)
 
@@ -492,10 +262,7 @@ def repay_loan(loan_id):
                 emi_schedule_id=emi_id
             )
 
-            flash(
-                f'Repayment of ₹{amount:,} submitted! Awaiting admin approval.',
-                'success'
-            )
+            flash(f'Repayment of ₹{amount:,} submitted! Awaiting admin approval.', 'success')
             return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
         except WalletError as e:
@@ -505,17 +272,8 @@ def repay_loan(loan_id):
         except ValueError:
             flash('Please enter a valid amount!', 'danger')
 
-    return render_template(
-        'loans/repay.html',
-        loan=loan,
-        group=group,
-        remaining_amount=remaining_amount,
-        emi_schedule=emi_schedule,
-        next_emi=next_emi,
-        paid_emis=paid_emis,
-        remaining_emis=remaining_emis,
-        can_make_full_payment=can_make_full_payment
-    )
+    return render_template('loans/repay.html', **form_data)
+
 
 # ============== VIEW EMI SCHEDULE ==============
 @loans_bp.route('/loans/<int:loan_id>/emi-schedule')
@@ -528,36 +286,14 @@ def view_emi_schedule(loan_id):
         flash('You are not a member of this group!', 'danger')
         return redirect(url_for('groups.list_groups'))
 
-    # Fetch all EMI records ordered by installment
-    emi_schedule = EMISchedule.query.filter_by(loan_id=loan_id).order_by(
-        EMISchedule.installment_number
-    ).all()
+    # Get EMI schedule data using helper
+    emi_data, error_msg = get_emi_schedule_data(loan_id)
 
-    if not emi_schedule:
-        flash('No EMI schedule found for this loan.', 'info')
+    if error_msg:
+        flash(error_msg, 'info')
         return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
-    # Calculate accurate totals from EMI records
-    total_emi_sum = sum(e.emi_amount for e in emi_schedule)
-    total_principal_sum = sum(e.principal_component for e in emi_schedule)
-    total_interest_sum = sum(e.interest_component for e in emi_schedule)
-
-    # Additional stats
-    paid_installments = sum(1 for e in emi_schedule if e.is_paid)
-    total_installments = len(emi_schedule)
-    total_paid_amount = sum(e.paid_amount or e.emi_amount for e in emi_schedule if e.is_paid)
-
-    return render_template(
-        'loans/emi_schedule.html',
-        loan=loan,
-        emi_schedule=emi_schedule,
-        total_emi_sum=total_emi_sum,
-        total_principal_sum=total_principal_sum,
-        total_interest_sum=total_interest_sum,
-        paid_installments=paid_installments,
-        total_installments=total_installments,
-        total_paid_amount=total_paid_amount
-    )
+    return render_template('loans/emi_schedule.html', **emi_data)
 
 
 # ============== VIEW REPAYMENT HISTORY ==============
@@ -611,8 +347,6 @@ def close_loan(loan_id):
     return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
 
-
-# ============== EDIT LOAN (ADMIN ONLY) ==============
 # ============== EDIT LOAN (ADMIN ONLY) ==============
 @loans_bp.route('/loans/<int:loan_id>/edit', methods=['POST'])
 @login_required
@@ -627,23 +361,24 @@ def edit_loan(loan_id):
 
     try:
         change_reason = request.form.get('change_reason', '').strip()
+        remarks = request.form.get('remarks', '').strip()
+        notes = request.form.get('notes', '').strip()
+
+        # Validate loan edit data using helper
+        changes, errors, financial_terms_changed = validate_loan_edit_data(
+            loan, group, request.form
+        )
+
+        if errors:
+            for error in errors:
+                flash(error, 'danger')
+            return redirect(url_for('loans.view_loan', loan_id=loan_id))
+
         if not change_reason:
             flash('Please provide a reason for the changes.', 'danger')
             return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
-        # Get form data
-        amount = request.form.get('amount')
-        interest_rate = request.form.get('interest_rate')
-        loan_duration = request.form.get('loan_duration')
-        repayment_type = request.form.get('repayment_type')
-        remarks = request.form.get('remarks', '').strip()
-        notes = request.form.get('notes', '').strip()
-
-        # Track what changed for audit
-        changes = []
-        financial_terms_changed = False
-
-        # Check current state before changes
+        # Track old values for audit
         old_amount = loan.amount
         old_interest_rate = loan.interest_rate
         old_duration = loan.loan_duration_months
@@ -651,77 +386,35 @@ def edit_loan(loan_id):
         old_total_repayable = loan.total_repayable
         old_emi_amount = loan.emi_amount
 
-        # ============== VALIDATE AND UPDATE FIELDS ==============
-
+        # ============== APPLY CHANGES ==============
         # Update loan amount (only if pending or pre-approved)
+        amount = request.form.get('amount')
         if loan.status in [LoanStatus.PENDING.value, LoanStatus.PRE_APPROVED.value] and amount:
-            try:
-                new_amount = float(amount)
-                if new_amount <= 0:
-                    flash('Amount must be greater than 0', 'danger')
-                    return redirect(url_for('loans.view_loan', loan_id=loan_id))
-
-                # Check if amount is a whole number
-                if new_amount != int(new_amount):
-                    flash('Amount must be a whole number (no decimals)', 'danger')
-                    return redirect(url_for('loans.view_loan', loan_id=loan_id))
-
-                new_amount = int(new_amount)
-
-                if new_amount != loan.amount:
-                    changes.append(f"Amount: ₹{loan.amount} → ₹{new_amount}")
-                    loan.amount = new_amount
-                    if loan.status in [LoanStatus.PRE_APPROVED.value, LoanStatus.APPROVED.value]:
-                        loan.approved_amount = new_amount
-                    financial_terms_changed = True
-            except ValueError:
-                flash('Invalid amount format', 'danger')
-                return redirect(url_for('loans.view_loan', loan_id=loan_id))
+            new_amount = int(float(amount))
+            if new_amount != loan.amount:
+                loan.amount = new_amount
+                if loan.status in [LoanStatus.PRE_APPROVED.value, LoanStatus.APPROVED.value]:
+                    loan.approved_amount = new_amount
 
         # Update loan duration
+        loan_duration = request.form.get('loan_duration')
         if loan_duration:
-            try:
-                new_duration = int(loan_duration)
-                if new_duration <= 0:
-                    flash('Loan duration must be greater than 0', 'danger')
-                    return redirect(url_for('loans.view_loan', loan_id=loan_id))
-
-                # VALIDATE MINIMUM DURATION AGAINST GROUP POLICY
-                if new_duration < group.min_emi_duration_months:
-                    flash(f'Loan duration must be at least {group.min_emi_duration_months} months (group policy)!',
-                          'danger')
-                    return redirect(url_for('loans.view_loan', loan_id=loan_id))
-
-                if loan.loan_duration_months is None or new_duration != loan.loan_duration_months:
-                    changes.append(f"Duration: {loan.loan_duration_months or 'N/A'} months → {new_duration} months")
-                    loan.loan_duration_months = new_duration
-                    financial_terms_changed = True
-            except ValueError:
-                flash('Invalid loan duration format', 'danger')
-                return redirect(url_for('loans.view_loan', loan_id=loan_id))
+            new_duration = int(loan_duration)
+            if loan.loan_duration_months is None or new_duration != loan.loan_duration_months:
+                loan.loan_duration_months = new_duration
 
         # Update interest rate
+        interest_rate = request.form.get('interest_rate')
         if interest_rate:
-            try:
-                new_rate = float(interest_rate)
-                if new_rate < 0:
-                    flash('Interest rate cannot be negative', 'danger')
-                    return redirect(url_for('loans.view_loan', loan_id=loan_id))
-
-                if loan.interest_rate is None or new_rate != loan.interest_rate:
-                    changes.append(f"Interest rate: {loan.interest_rate or 'N/A'}% → {new_rate}%")
-                    loan.interest_rate = new_rate
-                    financial_terms_changed = True
-            except ValueError:
-                flash('Invalid interest rate format', 'danger')
-                return redirect(url_for('loans.view_loan', loan_id=loan_id))
+            new_rate = float(interest_rate)
+            if loan.interest_rate is None or new_rate != loan.interest_rate:
+                loan.interest_rate = new_rate
 
         # Update repayment type
+        repayment_type = request.form.get('repayment_type')
         if repayment_type and repayment_type in ['emi', 'bullet']:
             if loan.repayment_type is None or repayment_type != loan.repayment_type:
-                changes.append(f"Repayment type: {loan.repayment_type or 'N/A'} → {repayment_type}")
                 loan.repayment_type = repayment_type
-                financial_terms_changed = True
 
         # ============== REGENERATE EMI SCHEDULE IF NEEDED ==============
         if financial_terms_changed and loan.status in [
@@ -835,8 +528,9 @@ def edit_loan(loan_id):
         traceback.print_exc()
 
     # Redirect with cache busting parameter
-    import time
     return redirect(url_for('loans.view_loan', loan_id=loan_id, _t=int(time.time())))
+
+
 # ============== LOAN AUDIT LOGS (ADMIN ONLY) ==============
 @loans_bp.route('/loans/<int:loan_id>/audit-logs')
 @login_required
@@ -848,28 +542,7 @@ def loan_audit_logs(loan_id):
         flash('Only group admin can view audit logs!', 'danger')
         return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
-    # Gather audit data from related models
-    approvals = LoanApproval.query.filter_by(loan_id=loan_id).order_by(
-        LoanApproval.voted_at.desc()
-    ).all()
+    # Get audit data using helper
+    audit_data = get_loan_audit_data(loan_id)
 
-    repayments = LoanRepayment.query.filter_by(loan_id=loan_id).order_by(
-        LoanRepayment.submitted_at.desc()
-    ).all()
-
-    # Get wallet transactions related to this loan
-    transactions = []
-    if loan.group and loan.group.wallet:
-        transactions = WalletTransaction.query.filter(
-            WalletTransaction.wallet_id == loan.group.wallet.id,
-            WalletTransaction.reference_type == 'loan',
-            WalletTransaction.reference_id == loan_id
-        ).order_by(WalletTransaction.created_at.desc()).all()
-
-    return render_template(
-        'loans/audit_logs.html',
-        loan=loan,
-        approvals=approvals,
-        repayments=repayments,
-        transactions=transactions
-    )
+    return render_template('loans/audit_logs.html', **audit_data)

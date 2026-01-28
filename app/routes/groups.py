@@ -3,25 +3,36 @@ GROUP MANAGEMENT ROUTES
 =======================
 Clean, simplified group management.
 """
-"""
-GROUP MANAGEMENT ROUTES
-=======================
-Clean, simplified group management.
-"""
 from datetime import datetime
-
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import Group, GroupMember, User, MemberRole, LoanRequest, LoanStatus, MemberLedger, WithdrawalRequest, \
-    MemberFinancialSummary, GroupWallet
+from app.models import Group, GroupMember, User, MemberRole, LoanRequest, MemberLedger, WithdrawalRequest, GroupWallet
 from app.services.wallet_service import create_wallet_for_group
 from app.services.membership_service import (
     add_member, leave_group, remove_member, transfer_admin,
-    get_member_liabilities, MembershipError, rejoin_group
+    MembershipError, rejoin_group, get_member_group_financial_summary
 )
 from app.services.authorization_service import (
-    is_group_admin, is_group_member, AuthorizationError, can_rejoin_group, can_leave_group
+    is_group_admin, is_group_member, AuthorizationError, can_rejoin_group, is_group_admin
+)
+from app.helperfunctions import (
+    get_active_members,
+    get_pending_loans_for_group_sorted,
+    get_eligible_members_for_admin_transfer,
+    get_member_profile_data,
+    has_active_loans_in_group,
+    get_admin_count_in_group,
+    can_user_leave_group,
+    validate_group_creation_data,
+    get_group_awaiting_disbursement,
+    get_group_pending_repayments,
+    is_last_admin_leaving,
+    is_group_empty,
+    is_group_wallet_empty,
+    get_group_or_404,
+    require_group_admin,
+    get_active_members_count
 )
 
 groups_bp = Blueprint('groups', __name__)
@@ -42,21 +53,29 @@ def list_groups():
 def create_group():
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        interest_rate = request.form.get('interest_rate', 12.0, type=float)
+        loan_duration = request.form.get('loan_duration', 12, type=int)
+        repayment_type = request.form.get('repayment_type', 'emi')
+        use_flat_rate = 'use_flat_rate' in request.form
 
-        if not name:
-            flash('Group name is required!', 'danger')
+        # Validate group creation data
+        is_valid, error_msg = validate_group_creation_data(name, description, interest_rate, loan_duration, repayment_type)
+        if not is_valid:
+            flash(error_msg, 'danger')
             return redirect(url_for('groups.create_group'))
 
         try:
             # Create group
             new_group = Group(
                 name=name,
-                description=request.form.get('description', '').strip(),
+                description=description,
                 created_by=current_user.id,
-                default_interest_rate=request.form.get('interest_rate', 12.0, type=float),
-                default_loan_duration_months=request.form.get('loan_duration', 12, type=int),
-                default_repayment_type=request.form.get('repayment_type', 'emi'),
-                use_flat_rate='use_flat_rate' in request.form
+                default_interest_rate=interest_rate,
+                default_loan_duration_months=loan_duration,
+                default_repayment_type=repayment_type,
+                use_flat_rate=use_flat_rate,
+                min_emi_duration_months=request.form.get('min_emi_duration', type=int)
             )
             db.session.add(new_group)
             db.session.flush()
@@ -85,48 +104,30 @@ def create_group():
 
 
 # ============== VIEW SINGLE GROUP ==============
-# ============== VIEW SINGLE GROUP ==============
 @groups_bp.route('/groups/<int:group_id>')
 @login_required
 def view_group(group_id):
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
     if not is_group_member(current_user.id, group_id):
         flash('You are not a member of this group!', 'danger')
         return redirect(url_for('groups.list_groups'))
 
     # Get active members count for delete group check
-    active_members_count = GroupMember.query.filter_by(
-        group_id=group_id,
-        is_active=True
-    ).count()
-
-    members = GroupMember.query.filter_by(group_id=group_id, is_active=True).all()
+    active_members_count = get_active_members_count(group_id)
+    members = get_active_members(group_id)
     is_admin = is_group_admin(current_user.id, group_id)
 
     # Pending loans
-    pending_loans = LoanRequest.query.filter_by(
-        group_id=group_id,
-        status=LoanStatus.PENDING.value,
-        is_active=True
-    ).order_by(LoanRequest.created_at.desc()).all()
+    pending_loans = get_pending_loans_for_group_sorted(group_id)
 
     # Admin-only data
     awaiting_disbursement = []
     pending_repayments = []
 
     if is_admin:
-        awaiting_disbursement = LoanRequest.query.filter_by(
-            group_id=group_id,
-            status=LoanStatus.APPROVED.value,
-            is_active=True
-        ).filter(LoanRequest.disbursed_at.is_(None)).all()
-
-        from app.models import LoanRepayment, RepaymentStatus
-        pending_repayments = LoanRepayment.query.join(LoanRequest).filter(
-            LoanRequest.group_id == group_id,
-            LoanRepayment.status == RepaymentStatus.PENDING.value
-        ).all()
+        awaiting_disbursement = get_group_awaiting_disbursement(group_id)
+        pending_repayments = get_group_pending_repayments(group_id)
 
     return render_template(
         'groups/detail.html',
@@ -145,12 +146,12 @@ def view_group(group_id):
 @groups_bp.route('/groups/<int:group_id>/settings', methods=['GET', 'POST'])
 @login_required
 def group_settings(group_id):
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
     # Check admin status
-    is_admin = is_group_admin(current_user.id, group_id)
+    is_admin, error_msg = require_group_admin(current_user.id, group_id)
     if not is_admin:
-        flash('Only admin can access settings!', 'danger')
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
 
     if request.method == 'POST':
@@ -170,7 +171,7 @@ def group_settings(group_id):
         return redirect(url_for('groups.view_group', group_id=group_id))
 
     # Fetch data needed for the Delete Group logic in settings.html
-    members = GroupMember.query.filter_by(group_id=group_id, is_active=True).all()
+    members = get_active_members(group_id)
 
     return render_template(
         'groups/settings.html',
@@ -179,14 +180,17 @@ def group_settings(group_id):
         members=members,  # Required for members|length check
         wallet=group.wallet  # Required for wallet.balance check
     )
+
+
 # ============== ADD MEMBER ==============
 @groups_bp.route('/groups/<int:group_id>/add-member', methods=['GET', 'POST'])
 @login_required
 def add_member_route(group_id):
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
-    if not is_group_admin(current_user.id, group_id):
-        flash('Only admin can add members!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group_id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
 
     if request.method == 'POST':
@@ -207,8 +211,6 @@ def add_member_route(group_id):
 
 
 # ============== REMOVE MEMBER ==============
-# In groups.py, update the remove_member_route:
-# In groups.py, update the remove_member_route:
 @groups_bp.route('/groups/<int:group_id>/remove-member/<int:user_id>', methods=['POST'])
 @login_required
 def remove_member_route(group_id, user_id):
@@ -228,56 +230,41 @@ def remove_member_route(group_id, user_id):
 
     return redirect(url_for('groups.view_group', group_id=group_id))
 
-# ============== LEAVE GROUP ROUTE ==============
+
 # ============== LEAVE GROUP ROUTE ==============
 @groups_bp.route('/groups/<int:group_id>/leave', methods=['GET', 'POST'])
 @login_required
 def leave_group_route(group_id):
     """Member leaves group"""
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
     if not is_group_member(current_user.id, group_id):
         flash('You are not a member of this group!', 'danger')
         return redirect(url_for('groups.list_groups'))
 
     # Check if user is the last admin
-    is_admin = is_group_admin(current_user.id, group_id)
-    if is_admin:
-        admin_count = GroupMember.query.filter_by(
-            group_id=group_id,
-            role=MemberRole.ADMIN.value,
-            is_active=True
-        ).count()
+    if is_last_admin_leaving(current_user.id, group_id):
+        # Check if admin is the ONLY member AND wallet balance is zero
+        active_members_count = get_active_members_count(group_id)
+        wallet_balance = group.wallet.balance if group.wallet else 0
 
-        if admin_count <= 1:
-            # Check if admin is the ONLY member AND wallet balance is zero
-            active_members_count = GroupMember.query.filter_by(
-                group_id=group_id,
-                is_active=True
-            ).count()
-
-            # Get wallet balance
-            wallet_balance = group.wallet.balance if group.wallet else 0
-
-            # If admin is the only member AND wallet balance is zero, allow leaving (which will delete group)
-            if active_members_count == 1 and wallet_balance == 0:
-                # This is okay - admin can leave and group will be deleted
-                pass
-            else:
-                flash('Cannot leave group as you are the only admin. Transfer admin rights first or delete the group.',
-                      'danger')
-                return redirect(url_for('groups.view_group', group_id=group_id))
+        # If admin is the only member AND wallet balance is zero, allow leaving (which will delete group)
+        if active_members_count == 1 and wallet_balance == 0:
+            # This is okay - admin can leave and group will be deleted
+            pass
+        else:
+            flash('Cannot leave group as you are the only admin. Transfer admin rights first or delete the group.',
+                  'danger')
+            return redirect(url_for('groups.view_group', group_id=group_id))
 
     if request.method == 'POST':
         try:
             # Check if this is the last member leaving
-            active_members_count = GroupMember.query.filter_by(
-                group_id=group_id,
-                is_active=True
-            ).count()
+            active_members_count = get_active_members_count(group_id)
 
             # If admin is leaving and they're the only member AND wallet balance is zero
             # then delete the group instead of just leaving
+            is_admin = is_group_admin(current_user.id, group_id)
             if is_admin and active_members_count == 1 and (group.wallet and group.wallet.balance == 0):
                 try:
                     # Delete the group
@@ -320,22 +307,19 @@ def leave_group_route(group_id):
 
     return render_template('groups/leave_group.html', group=group)
 
+
 # ============== TRANSFER ADMIN ==============
 @groups_bp.route('/groups/<int:group_id>/transfer-admin', methods=['GET', 'POST'])
 @login_required
 def transfer_admin_route(group_id):
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
-    if not is_group_admin(current_user.id, group_id):
-        flash('Only admin can transfer rights!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group_id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
 
-    eligible_members = GroupMember.query.filter(
-        GroupMember.group_id == group_id,
-        GroupMember.is_active == True,
-        GroupMember.role != MemberRole.ADMIN.value,
-        GroupMember.user_id != current_user.id
-    ).all()
+    eligible_members = get_eligible_members_for_admin_transfer(group_id, current_user.id)
 
     if request.method == 'POST':
         to_user_id = request.form.get('to_user_id', type=int)
@@ -354,39 +338,23 @@ def transfer_admin_route(group_id):
     return render_template('groups/transfer_admin.html', group=group, eligible_members=eligible_members)
 
 
-# Update the view_member function to include withdrawal info
+# ============== VIEW MEMBER PROFILE ==============
 @groups_bp.route('/groups/<int:group_id>/member/<int:user_id>')
 @login_required
 def view_member(group_id, user_id):
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
     if not is_group_member(current_user.id, group_id):
         flash('You are not a member of this group!', 'danger')
         return redirect(url_for('groups.list_groups'))
 
-    member = User.query.get_or_404(user_id)
-    membership = GroupMember.query.filter_by(
-        group_id=group_id, user_id=user_id, is_active=True
-    ).first_or_404()
-
-    # Get member ledger
-    ledger = MemberLedger.query.filter_by(
-        wallet_id=group.wallet.id, user_id=user_id
-    ).first() if group.wallet else None
-
-    # Get loans
-    loans = LoanRequest.query.filter_by(
-        group_id=group_id, requested_by=user_id, is_active=True
-    ).all()
-
-    # Get withdrawal history for this member
-    withdrawals = WithdrawalRequest.query.filter_by(
-        group_id=group_id,
-        user_id=user_id
-    ).order_by(WithdrawalRequest.created_at.desc()).limit(10).all()
+    # Get member profile data using helper
+    profile_data = get_member_profile_data(user_id, group_id)
+    if not profile_data:
+        flash('Member not found or not active in this group!', 'danger')
+        return redirect(url_for('groups.view_group', group_id=group_id))
 
     # Get member's financial summary from service
-    from app.services.membership_service import get_member_group_financial_summary
     financial_summary = get_member_group_financial_summary(user_id, group_id)
 
     # Check if current user is admin
@@ -394,51 +362,33 @@ def view_member(group_id, user_id):
 
     return render_template(
         'groups/member_profile.html',
-        group=group,
-        member=member,
-        membership=membership,
-        ledger=ledger,
-        loans=loans,
-        withdrawals=withdrawals,
+        **profile_data,
         financial_summary=financial_summary,
-        is_admin=is_admin  # Add this
+        is_admin=is_admin
     )
-# In groups.py, add this route:
 
+
+# ============== DELETE GROUP ==============
 @groups_bp.route('/groups/<int:group_id>/delete', methods=['POST'])
 @login_required
 def delete_group_route(group_id):
     """Delete a group (admin only, only if no other members)"""
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
-    if not is_group_admin(current_user.id, group_id):
-        flash('Only admin can delete group!', 'danger')
+    is_admin, error_msg = require_group_admin(current_user.id, group_id)
+    if not is_admin:
+        flash(error_msg, 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
 
     # Get active members count
-    active_members_count = GroupMember.query.filter_by(
-        group_id=group_id,
-        is_active=True
-    ).count()
+    active_members_count = get_active_members_count(group_id)
 
     if active_members_count > 1:
         flash('Cannot delete group - there are other active members!', 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
 
     # Check if there are any active loans
-    active_loans = LoanRequest.query.filter_by(
-        group_id=group_id,
-        is_active=True
-    ).filter(
-        LoanRequest.status.in_([
-            LoanStatus.PENDING.value,
-            LoanStatus.PRE_APPROVED.value,
-            LoanStatus.APPROVED.value,
-            LoanStatus.DISBURSED.value
-        ])
-    ).count()
-
-    if active_loans > 0:
+    if has_active_loans_in_group(group_id):
         flash('Cannot delete group - there are active loans!', 'danger')
         return redirect(url_for('groups.view_group', group_id=group_id))
 
@@ -469,11 +419,12 @@ def delete_group_route(group_id):
         return redirect(url_for('groups.view_group', group_id=group_id))
 
 
+# ============== REJOIN GROUP ==============
 @groups_bp.route('/groups/<int:group_id>/rejoin', methods=['GET', 'POST'])
 @login_required
 def rejoin_group_route(group_id):
     """Re-join a group"""
-    group = Group.query.get_or_404(group_id)
+    group = get_group_or_404(group_id)
 
     # Check authorization
     allowed, reason = can_rejoin_group(current_user.id, group_id)

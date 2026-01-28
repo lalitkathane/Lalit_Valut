@@ -1,23 +1,9 @@
-"""
-LOAN SERVICE
-============
-
-Handles:
-- Creating loan requests
-- Processing votes
-- Calculating interest
-- Generating EMI schedules
-"""
-
 from datetime import datetime, date
 from app.extensions import db
-from app.models import (
-    LoanRequest, LoanApproval, EMISchedule, Group, GroupMember,
-    LoanStatus, MemberRole, LoanRepayment
-)
+from app.models import *
 from app.services.authorization_service import can_vote, AuthorizationError
+from app.services.helperfunctions import *
 import math
-
 
 class LoanError(Exception):
     """Base exception for loan operations"""
@@ -60,17 +46,13 @@ def create_loan_request(group_id, user_id, amount, reason):
                 f"Reduce amount or wait for more contributions."
             )
 
-        # Check membership
-        membership = GroupMember.query.filter_by(
-            group_id=group_id,
-            user_id=user_id,
-            is_active=True
-        ).first()
+        # Check membership using helper
+        membership = get_membership(user_id, group_id)
 
         if not membership:
             raise AuthorizationError("You are not a member of this group")
 
-        # Check for existing pending loan
+        # Check for existing pending loan using helper
         existing = LoanRequest.query.filter_by(
             group_id=group_id,
             requested_by=user_id,
@@ -81,8 +63,8 @@ def create_loan_request(group_id, user_id, amount, reason):
         if existing:
             raise LoanError("You already have a pending loan request")
 
-        # FREEZE eligible voters count
-        total_members = group.get_active_member_count()
+        # FREEZE eligible voters count using helper
+        total_members = get_active_members_count(group_id)
         eligible_voters = total_members - 1  # Exclude requester
         required_approvals = (eligible_voters // 2) + 1  # Majority
 
@@ -143,21 +125,18 @@ def cast_vote(loan_id, user_id, approved, comment=None):
         db.session.add(vote)
         db.session.flush()
 
-        # Get current vote counts
-        approval_count = loan.get_approval_count()
-        rejection_count = loan.get_rejection_count()
-        votes_cast = approval_count + rejection_count
+        # Get current vote counts using helper
+        voting_stats = get_voting_stats(loan_id)
+        approval_count = voting_stats['approvals']
+        rejection_count = voting_stats['rejections']
+        votes_cast = voting_stats['votes_cast']
 
         # === DYNAMIC ADJUSTMENT FOR MEMBER DEPARTURE ===
-        # Recalculate current active eligible voters (excluding applicant)
-        current_active_members = loan.group.get_active_member_count()
+        # Recalculate current active eligible voters (excluding applicant) using helper
+        current_active_members = get_active_members_count(loan.group_id)
 
-        # Check if applicant is still active in group
-        applicant_membership = GroupMember.query.filter_by(
-            group_id=loan.group_id,
-            user_id=loan.requested_by,
-            is_active=True
-        ).first()
+        # Check if applicant is still active in group using helper
+        applicant_membership = get_membership(loan.requested_by, loan.group_id)
 
         if not applicant_membership:
             # Applicant left the group → reject loan
@@ -178,11 +157,8 @@ def cast_vote(loan_id, user_id, approved, comment=None):
             approve_loan_with_interest(loan)
 
             # Apply admin auto-approve logic (only if still only one admin)
-            admin_members = GroupMember.query.filter_by(
-                group_id=loan.group_id,
-                role=MemberRole.ADMIN.value,
-                is_active=True
-            ).all()
+            # Using helper to get admin members
+            admin_members = get_admin_members(loan.group_id)
 
             is_applicant_admin = any(m.user_id == loan.requested_by for m in admin_members)
             only_one_admin = len(admin_members) == 1
@@ -321,6 +297,8 @@ def approve_loan_with_interest(loan, is_regeneration=False):
 
     # COMMIT THE CHANGES TO DATABASE
     db.session.commit()
+
+
 # ============================================================
 # GENERATE EMI SCHEDULE (FLAT RATE)
 # ============================================================
@@ -488,6 +466,8 @@ def generate_emi_schedule_reducing_balance(loan):
 
     # Commit the EMIs to database
     db.session.commit()
+
+
 # ============================================================
 # GET LOAN DETAILS
 # ============================================================
@@ -505,27 +485,16 @@ def get_loan_details(loan_id):
     # Refresh the loan object to get latest data
     db.session.refresh(loan)
 
-    # Voting stats (fresh query)
-    approvals = LoanApproval.query.filter_by(
-        loan_id=loan_id,
-        approved=True
-    ).count()
+    # Voting stats using helper function
+    voting_stats = get_voting_stats(loan_id)
+    approvals = voting_stats['approvals']
+    rejections = voting_stats['rejections']
+    votes_cast = voting_stats['votes_cast']
 
-    rejections = LoanApproval.query.filter_by(
-        loan_id=loan_id,
-        approved=False
-    ).count()
-
-    votes_cast = approvals + rejections
-
-    # EMI schedule (fresh query)
+    # EMI schedule using helper function
     emi_schedule = []
     if loan.repayment_type == 'emi':
-        emi_records = EMISchedule.query.filter_by(
-            loan_id=loan_id
-        ).order_by(
-            EMISchedule.installment_number
-        ).all()
+        emi_records = get_emi_schedule(loan_id)
 
         for e in emi_records:
             emi_schedule.append({
@@ -598,6 +567,7 @@ def get_loan_details(loan_id):
         'repayments': repayment_list
     }
 
+
 # In loan_service.py or create a new validation_service.py:
 
 def validate_repayment_terms(loan, repayment_amount=None, emi_duration=None):
@@ -640,11 +610,8 @@ def can_regenerate_emi_schedule(loan_id):
                            LoanStatus.DISBURSED.value]:
         return False, f"Cannot regenerate EMI for loan in {loan.status} status"
 
-    # Check if any EMIs are paid
-    paid_emis = EMISchedule.query.filter_by(
-        loan_id=loan_id,
-        is_paid=True
-    ).count()
+    # Check if any EMIs are paid using helper
+    paid_emis = get_paid_emis_count(loan_id)
 
     if paid_emis > 0:
         return False, f"Cannot regenerate - {paid_emis} EMI(s) already paid"
@@ -686,10 +653,8 @@ def can_make_full_payment(loan_id):
     if not loan:
         return False
 
-    paid_emis = EMISchedule.query.filter_by(
-        loan_id=loan_id,
-        is_paid=True
-    ).count()
+    # Using helper to get paid EMIs count
+    paid_emis = get_paid_emis_count(loan_id)
 
     remaining_emis = loan.loan_duration_months - paid_emis
 
