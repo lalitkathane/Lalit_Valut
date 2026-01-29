@@ -4,18 +4,6 @@
 
 {% block content %}
 <div class="container py-4">
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
     <div class="row justify-content-center">
         <div class="col-lg-9">
             <!-- Group Settings Card -->
@@ -31,9 +19,10 @@
                         <span class="badge bg-light text-primary">Admin Only</span>
                     </div>
                 </div>
-                
+
                 <div class="card-body p-4">
-                    <form id="groupForm" action="{{ url_for('groups.group_settings', group_id=group.id) }}" method="POST">
+                    <form id="groupForm" action="{{ url_for('groups.group_settings', group_id=group.id) }}"
+                          method="POST">
                         {% include 'groups/_form.html' %}
 
                         <!-- Loan Policy Extensions -->
@@ -41,18 +30,19 @@
                             <h6 class="fw-bold mb-3 text-primary">
                                 <i class="bi bi-shield-check me-2"></i> Loan Policy Settings
                             </h6>
-                            
+
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">Minimum EMI Duration (Months)</label>
-                                    <input type="number" name="min_emi_duration" class="form-control" 
-                                           value="{{ group.min_emi_duration_months if group.min_emi_duration_months is not none else 3 }}" 
+                                    <input type="number" name="min_emi_duration" class="form-control"
+                                           value="{{ group.min_emi_duration_months if group.min_emi_duration_months is not none else 3 }}"
                                            min="1" max="60" step="1">
                                     <div class="form-text">
-                                        Minimum repayment period for EMI-based loans. Shorter durations increase monthly payments.
+                                        Minimum repayment period for EMI-based loans. Shorter durations increase monthly
+                                        payments.
                                     </div>
                                 </div>
-                                
+
                                 <div class="col-md-6">
                                     <div class="bg-light p-3 rounded-3 h-100">
                                         <h6 class="fw-bold small mb-2">Current Policy</h6>
@@ -60,8 +50,12 @@
                                             <li>Interest Rate: {{ "%.1f"|format(group.default_interest_rate) }}%</li>
                                             <li>Max Duration: {{ group.default_loan_duration_months }} months</li>
                                             <li>Repayment: {{ group.default_repayment_type|upper }}</li>
-                                            <li>Interest Type: {{ 'Flat Rate' if group.use_flat_rate else 'Reducing Balance' }}</li>
-                                            <li>Min EMI Duration: {{ group.min_emi_duration_months if group.min_emi_duration_months is not none else 3 }} months</li>
+                                            <li>Interest Type: {{ 'Flat Rate' if group.use_flat_rate else 'Reducing
+                                                Balance' }}
+                                            </li>
+                                            <li>Min EMI Duration: {{ group.min_emi_duration_months if
+                                                group.min_emi_duration_months is not none else 3 }} months
+                                            </li>
                                         </ul>
                                     </div>
                                 </div>
@@ -70,7 +64,7 @@
 
                         <!-- Save Changes Button -->
                         <div class="d-flex gap-2 mt-4 pt-4 border-top justify-content-end">
-                            <a href="{{ url_for('groups.view_group', group_id=group.id) }}" 
+                            <a href="{{ url_for('groups.view_group', group_id=group.id) }}"
                                class="btn btn-outline-secondary px-4">
                                 <i class="bi bi-x-circle me-1"></i> Cancel
                             </a>
@@ -91,7 +85,7 @@
                         <h5 class="mb-0 fw-bold">Danger Zone</h5>
                     </div>
                 </div>
-                
+
                 <div class="card-body p-4">
                     <!-- Delete Group Section -->
                     <div class="mb-4">
@@ -137,7 +131,8 @@
                                 {% endif %}
 
                                 <!-- Check active loans -->
-                                {% set active_loans = group.loan_requests.filter_by(is_active=True, status='disbursed').count() %}
+                                {% set active_loans = group.loan_requests.filter_by(is_active=True,
+                                status='disbursed').count() %}
                                 {% if active_loans > 0 %}
                                 <li class="text-danger fw-bold">
                                     <i class="bi bi-x-circle me-1"></i>
@@ -154,17 +149,17 @@
 
                         <!-- Delete Button -->
                         <div class="mt-4">
-                            <form action="{{ url_for('groups.delete_group_route', group_id=group.id) }}" 
-                                  method="POST" 
+                            <form action="{{ url_for('groups.delete_group_route', group_id=group.id) }}"
+                                  method="POST"
                                   onsubmit="return confirmDelete()">
-                                
+
                                 <div class="mb-3">
                                     <label for="deleteConfirmation" class="form-label fw-semibold">
                                         Type group name to confirm deletion:
                                     </label>
-                                    <input type="text" 
-                                           id="deleteConfirmation" 
-                                           class="form-control" 
+                                    <input type="text"
+                                           id="deleteConfirmation"
+                                           class="form-control"
                                            placeholder="Type '{{ group.name }}' to confirm"
                                            oninput="validateDeletion()">
                                     <div class="form-text text-danger">
@@ -172,10 +167,11 @@
                                     </div>
                                 </div>
 
-                                <button type="submit" 
+                                <button type="submit"
                                         id="deleteButton"
                                         class="btn btn-danger w-100"
-                                        {% if total_members > 1 or current_balance > 0 or active_loans > 0 %}disabled{% endif %}>
+                                        {% if total_members> 1 or current_balance > 0 or active_loans > 0 %}disabled{%
+                                    endif %}>
                                     <i class="bi bi-trash3 me-2"></i> Permanently Delete "{{ group.name }}"
                                 </button>
                             </form>
@@ -187,13 +183,13 @@
                         <h6 class="fw-bold mb-3">Other Administrative Actions</h6>
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <a href="{{ url_for('groups.transfer_admin_route', group_id=group.id) }}" 
+                                <a href="{{ url_for('groups.transfer_admin_route', group_id=group.id) }}"
                                    class="btn btn-outline-warning w-100">
                                     <i class="bi bi-arrow-left-right me-1"></i> Transfer Admin Rights
                                 </a>
                             </div>
                             <div class="col-md-6">
-                                <a href="{{ url_for('groups.add_member_route', group_id=group.id) }}" 
+                                <a href="{{ url_for('groups.add_member_route', group_id=group.id) }}"
                                    class="btn btn-outline-success w-100">
                                     <i class="bi bi-person-plus me-1"></i> Add New Member
                                 </a>
@@ -227,25 +223,25 @@
 </style>
 
 <script>
-function confirmDelete() {
-    const groupName = "{{ group.name }}";
-    const confirmation = document.getElementById('deleteConfirmation').value;
-    
-    if (confirmation !== groupName) {
-        alert(`Please type "${groupName}" exactly to confirm deletion.`);
-        return false;
-    }
-    
-    return confirm(`Are you absolutely sure you want to delete "${groupName}" permanently?\n\nThis will delete:\n• All member contributions\n• Loan history\n• Financial transactions\n• Group data\n\nThis action CANNOT BE UNDONE.`);
-}
+    function confirmDelete() {
+        const groupName = "{{ group.name }}";
+        const confirmation = document.getElementById('deleteConfirmation').value;
 
-function validateDeletion() {
-    const groupName = "{{ group.name }}";
-    const input = document.getElementById('deleteConfirmation').value;
-    const button = document.getElementById('deleteButton');
-    
-    // Enable button only if input matches exactly
-    button.disabled = input !== groupName;
-}
+        if (confirmation !== groupName) {
+            alert(`Please type "${groupName}" exactly to confirm deletion.`);
+            return false;
+        }
+
+        return confirm(`Are you absolutely sure you want to delete "${groupName}" permanently?\n\nThis will delete:\n• All member contributions\n• Loan history\n• Financial transactions\n• Group data\n\nThis action CANNOT BE UNDONE.`);
+    }
+
+    function validateDeletion() {
+        const groupName = "{{ group.name }}";
+        const input = document.getElementById('deleteConfirmation').value;
+        const button = document.getElementById('deleteButton');
+
+        // Enable button only if input matches exactly
+        button.disabled = input !== groupName;
+    }
 </script>
 {% endblock %}

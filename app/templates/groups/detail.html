@@ -4,18 +4,6 @@
 
 {% block content %}
 <div class="container py-4">
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
     <!-- Group Header -->
     <div class="card border-0 shadow-sm mb-4 overflow-hidden rounded-4">
         <div class="bg-gradient" style="height: 6px; background: linear-gradient(90deg, #6366f1, #8b5cf6);"></div>
