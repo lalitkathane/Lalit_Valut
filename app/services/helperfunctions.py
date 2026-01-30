@@ -1,6 +1,6 @@
 from app.models import *
 from datetime import datetime
-from sqlalchemy import func, case
+from sqlalchemy import func, case ,extract
 
 
 # ====================================
@@ -918,8 +918,8 @@ def get_loan_view_data(loan_id, user_id):
         repayment_this_month = LoanRepayment.query.filter(
             LoanRepayment.loan_id == loan_id,
             LoanRepayment.paid_by == user_id,
-            db.extract('month', LoanRepayment.submitted_at) == current_month,
-            db.extract('year', LoanRepayment.submitted_at) == current_year
+            extract('month', LoanRepayment.submitted_at) == current_month,
+            extract('year', LoanRepayment.submitted_at) == current_year
         ).first()
 
         has_repayment_this_month = repayment_this_month is not None
@@ -1009,7 +1009,7 @@ def get_repayment_form_data(loan_id, user_id):
     """Get data for repayment form"""
     from app.models import LoanRequest, Group, EMISchedule, LoanRepayment
     from datetime import datetime
-    from sqlalchemy import extract
+
 
     loan = LoanRequest.query.get_or_404(loan_id)
     group = loan.group
@@ -1353,7 +1353,7 @@ def get_withdraw_form_data(group_id, user_id):
     """Get data for withdrawal form"""
     from app.models import Group, GroupWallet, MemberLedger
     from app.services.withdrawal_service import get_withdrawable_amounts
-    from app.services.authorization_service import is_group_member,is_group_admin
+    from app.services.authorization_service import is_group_member, is_group_admin
 
     group = Group.query.get_or_404(group_id)
 
@@ -1372,7 +1372,8 @@ def get_withdraw_form_data(group_id, user_id):
     # Get member ledger
     ledger = MemberLedger.query.filter_by(
         wallet_id=wallet.id,
-        user_id=user_id
+        user_id=user_id,
+        is_active=True
     ).first()
 
     # Create member_balance object
@@ -1382,16 +1383,20 @@ def get_withdraw_form_data(group_id, user_id):
         'net_interest': ledger.net_interest if ledger else 0
     }
 
+    # Calculate maximum withdrawable amount (minimum of user balance and wallet balance)
+    wallet_balance = wallet.balance
+    max_withdrawable = min(member_balance['total_balance'], wallet_balance)
+
     return {
         'group': group,
         'wallet': wallet,
         'ledger': ledger,
         'withdrawable': withdrawable,
         'member_balance': member_balance,
-        "is_group_admin": is_group_admin(user_id, group_id)
-
+        'wallet_balance': wallet_balance,
+        'max_withdrawable': max_withdrawable,
+        'is_group_admin': is_group_admin(user_id, group_id)
     }, None
-
 
 def validate_contribution_data(amount, description):
     """Validate contribution form data"""

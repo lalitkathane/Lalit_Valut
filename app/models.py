@@ -95,8 +95,7 @@ class User(UserMixin, db.Model):
     repayments = db.relationship('LoanRepayment', backref='payer', lazy='dynamic',
                                  foreign_keys='LoanRepayment.paid_by')
     member_ledgers = db.relationship('MemberLedger', backref='member', lazy='dynamic')
-    # REMOVED: withdrawal_requests = db.relationship('WithdrawalRequest', foreign_keys='WithdrawalRequest.user_id',
-    #                                              backref='withdrawal_user', lazy='dynamic')
+
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -566,7 +565,7 @@ class MemberContribution(db.Model):
 
 
 # ============================================================
-# WITHDRAWAL REQUEST MODEL - FIXED
+# WITHDRAWAL REQUEST MODEL - UPDATED
 # ============================================================
 class WithdrawalRequest(db.Model):
     """
@@ -584,13 +583,16 @@ class WithdrawalRequest(db.Model):
     interest_amount = db.Column(db.Float, default=0.0, nullable=False)
     total_amount = db.Column(db.Float, nullable=False)
 
+    # Reason fields
+    withdrawal_reason = db.Column(db.String(255), nullable=True)  # For member's reason
+    rejection_reason = db.Column(db.String(255), nullable=True)  # For admin rejection reason
+
     # Status workflow
     status = db.Column(db.String(20), default=WithdrawalStatus.PENDING.value, nullable=False)
 
     # Approval details
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     approved_at = db.Column(db.DateTime, nullable=True)
-    rejection_reason = db.Column(db.String(255), nullable=True)
 
     # Processing details
     processed_at = db.Column(db.DateTime, nullable=True)

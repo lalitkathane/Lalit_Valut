@@ -255,11 +255,11 @@
                                 <tr>
                                     <td>{{ withdrawal.created_at.strftime('%d %b %Y') }}</td>
                                     <td>
-                                        {% if withdrawal.withdrawal_type == 'principal_only' %}
-                                        <span class="badge bg-info">Principal Only</span>
-                                        {% else %}
-                                        <span class="badge bg-warning">With Interest</span>
-                                        {% endif %}
+                                            {% if withdrawal.interest_amount == 0 %}
+                                            <span class="badge bg-info">Principal Only</span>
+                                            {% else %}
+                                            <span class="badge bg-warning">With Interest</span>
+                                            {% endif %}
                                     </td>
                                     <td class="fw-bold">₹{{ "%.2f"|format(withdrawal.total_amount) }}</td>
                                     <td>

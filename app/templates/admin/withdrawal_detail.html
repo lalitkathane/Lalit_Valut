@@ -44,10 +44,12 @@
                         <div class="col-md-6">
                             <small class="text-muted">Type</small>
                             <h6>
-                                <span class="badge bg-{{ 'info' if withdrawal.withdrawal_type == 'principal_only' else 'warning' }}">
-                                    {{ withdrawal.withdrawal_type|replace('_', ' ')|title }}
-                                </span>
-                            </h6>
+                                    {% if withdrawal.interest_amount == 0 %}
+                                    <span class="badge bg-info">Principal Only</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">With Interest</span>
+                                    {% endif %}
+                                </h6>
                         </div>
                     </div>
 

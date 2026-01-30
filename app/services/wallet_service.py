@@ -224,18 +224,17 @@ def create_contribution_snapshot(loan_id, borrower_id, wallet_id):
     """
     Create a snapshot of contributions at loan approval time.
 
-    CRITICAL RULES:
+    CRITICAL UPDATES:
     - Borrower is EXCLUDED from the snapshot
-    - Only members with contributions > 0 are included
-    - Percentages calculated from eligible pool only
-
-    Returns: list of LoanContributionSnapshot
+    - Only members with ACTIVE ledgers AND contributions > 0 are included
+    - Percentages calculated from eligible ACTIVE pool only
     """
-    # Get all member ledgers EXCLUDING borrower
+    # Get all member ledgers EXCLUDING borrower AND only ACTIVE
     ledgers = MemberLedger.query.filter(
         MemberLedger.wallet_id == wallet_id,
-        MemberLedger.user_id != borrower_id,  # ⚠️ EXCLUDE BORROWER
-        MemberLedger.principal_contributed > 0
+        MemberLedger.user_id != borrower_id,  # EXCLUDE BORROWER
+        MemberLedger.principal_contributed > 0,
+        MemberLedger.is_active == True  # CRITICAL: Only active members
     ).all()
 
     if not ledgers:
@@ -554,11 +553,11 @@ def distribute_interest_to_members(loan, repayment, wallet, interest_amount, adm
     """
     Distribute interest proportionally to eligible members.
 
-    CRITICAL RULES:
+    CRITICAL UPDATES:
     1. Use FROZEN contribution snapshot from loan approval time
     2. EXCLUDE the borrower completely
-    3. Interest split based on contribution percentage at approval
-    4. Update each member's ledger with interest earned
+    3. Only distribute to members with ACTIVE ledgers
+    4. Interest split based on contribution percentage at approval
     """
     distributions = []
 
@@ -566,12 +565,35 @@ def distribute_interest_to_members(loan, repayment, wallet, interest_amount, adm
     snapshots = get_contribution_snapshots_for_loan(loan.id)
 
     if not snapshots:
-        # No snapshots means no one to distribute to
         return distributions
 
+    # Filter: Get ONLY snapshots where member has ACTIVE ledger
+    active_snapshots = []
+    total_active_percentage = 0
+
     for snapshot in snapshots:
-        # Calculate interest share based on frozen percentage
-        interest_share = (snapshot.contribution_percentage / 100) * interest_amount
+        # Check if member has ACTIVE ledger
+        ledger = MemberLedger.query.filter_by(
+            wallet_id=wallet.id,
+            user_id=snapshot.user_id,
+            is_active=True  # CRITICAL: Only active members get interest
+        ).first()
+
+        if ledger:
+            active_snapshots.append(snapshot)
+            total_active_percentage += snapshot.contribution_percentage
+
+    if not active_snapshots:
+        # No active members to distribute to
+        return distributions
+
+    # Recalculate percentages based on active members only
+    for snapshot in active_snapshots:
+        # Calculate adjusted percentage (relative to active pool)
+        adjusted_percentage = (snapshot.contribution_percentage / total_active_percentage) * 100
+
+        # Calculate interest share based on adjusted percentage
+        interest_share = (adjusted_percentage / 100) * interest_amount
 
         if interest_share <= 0:
             continue
@@ -582,13 +604,13 @@ def distribute_interest_to_members(loan, repayment, wallet, interest_amount, adm
             repayment_id=repayment.id,
             beneficiary_id=snapshot.user_id,
             contribution_amount=snapshot.contribution_amount,
-            contribution_percentage=snapshot.contribution_percentage,
+            contribution_percentage=adjusted_percentage,  # Store adjusted percentage
             interest_earned=interest_share
         )
         db.session.add(distribution)
         db.session.flush()
 
-        # Update member's ledger
+        # Update member's ACTIVE ledger
         ledger = get_or_create_member_ledger(wallet.id, snapshot.user_id)
         ledger.add_interest(interest_share)
 
@@ -601,7 +623,7 @@ def distribute_interest_to_members(loan, repayment, wallet, interest_amount, adm
         int_txn = WalletTransaction(
             wallet_id=wallet.id,
             transaction_type=TransactionType.INTEREST_DISTRIBUTION.value,
-            amount=0,  # No wallet balance change (already in repayment)
+            amount=0,
             reference_type='interest_distribution',
             reference_id=distribution.id,
             created_by=admin_user_id,

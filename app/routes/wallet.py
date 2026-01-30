@@ -11,6 +11,7 @@ from app.services.authorization_service import (
     is_group_member, is_group_admin, AuthorizationError
 )
 from app.services.helperfunctions import *
+from app.models import GroupWallet
 
 wallet_bp = Blueprint('wallet', __name__)
 
@@ -22,7 +23,6 @@ def view_wallet(group_id):
     """View group wallet"""
     # Get wallet view data using helper
     wallet_data, error_msg = get_wallet_view_data(group_id, current_user.id)
-
 
     if error_msg:
         flash(error_msg, 'danger')
@@ -277,7 +277,6 @@ def interest_distributions(group_id):
 
 
 # ============== WITHDRAW FROM WALLET ==============
-# ============== WITHDRAW FROM WALLET ==============
 @wallet_bp.route('/groups/<int:group_id>/wallet/withdraw', methods=['GET', 'POST'])
 @login_required
 def withdraw_from_wallet(group_id):
@@ -293,6 +292,18 @@ def withdraw_from_wallet(group_id):
         try:
             amount = float(request.form.get('amount', 0))
             membership_action = request.form.get('membership_action', 'keep_active')
+            reason = request.form.get('reason', '')
+
+            # Get wallet balance for validation
+            wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+            if not wallet:
+                flash('Group wallet not found!', 'danger')
+                return render_template('wallet/withdraw.html', **withdraw_data)
+
+            # Validate withdrawal doesn't exceed wallet balance
+            if amount > wallet.balance:
+                flash(f'Cannot withdraw ₹{amount:.2f}. Wallet only has ₹{wallet.balance:.2f} available.', 'danger')
+                return render_template('wallet/withdraw.html', **withdraw_data)
 
             # Validate withdrawal data
             is_valid, error_msg = validate_withdrawal_data(
@@ -307,7 +318,8 @@ def withdraw_from_wallet(group_id):
                 user_id=current_user.id,
                 group_id=group_id,
                 total_amount=amount,
-                membership_action=membership_action
+                membership_action=membership_action,
+                reason=reason
             )
 
             flash(f'Withdrawal request of ₹{withdrawal.total_amount} submitted! Awaiting admin approval.', 'success')

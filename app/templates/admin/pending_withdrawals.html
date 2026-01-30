@@ -56,7 +56,6 @@
                         <thead>
                             <tr>
                                 <th>Member</th>
-                                <th>Type</th>
                                 <th>Amount Details</th>
                                 <th>Requested</th>
                                 <th>Membership Action</th>
@@ -69,11 +68,6 @@
                                 <td>
                                     <strong>{{ withdrawal.user.name }}</strong><br>
                                     <small class="text-muted">ID: {{ withdrawal.user_id }}</small>
-                                </td>
-                                <td>
-                                    <span class="badge bg-{{ 'info' if withdrawal.withdrawal_type == 'principal_only' else 'warning' }}">
-                                        {{ withdrawal.withdrawal_type|replace('_', ' ')|title }}
-                                    </span>
                                 </td>
                                 <td>
                                     <div class="mb-1">

@@ -22,7 +22,7 @@ class WithdrawalError(Exception):
 # CREATE WITHDRAWAL REQUEST
 # ============================================================
 
-def create_withdrawal_request(user_id, group_id, total_amount, membership_action='deactivate'):
+def create_withdrawal_request(user_id, group_id, total_amount, membership_action='deactivate', reason=None):
     try:
         # Check authorization - this already checks:
         # 1. Membership
@@ -30,19 +30,16 @@ def create_withdrawal_request(user_id, group_id, total_amount, membership_action
         # 3. Wallet exists
         # 4. Ledger exists with balance > 0
         # 5. No pending withdrawals
-        allowed, reason = can_withdraw(user_id, group_id)
+        allowed, reason_msg = can_withdraw(user_id, group_id)
         if not allowed:
-            raise AuthorizationError(reason)
+            raise AuthorizationError(reason_msg)
 
         # Get wallet and ledger for amount validations
         # (Using helper functions for consistency)
         wallet = get_group_wallet(group_id)
         ledger = get_user_ledger_for_group(user_id, group_id, active_only=True)
 
-        # Wallet and ledger are guaranteed to exist at this point because can_withdraw() passed
-        # But we still need them for amount validations
-
-        # Validate amounts (NEW checks not in can_withdraw())
+        # Validate amounts
         if total_amount <= 0:
             raise WithdrawalError("Amount must be greater than 0")
 
@@ -50,7 +47,7 @@ def create_withdrawal_request(user_id, group_id, total_amount, membership_action
         if total_amount > ledger.total_balance:
             raise WithdrawalError(f"Insufficient balance. Available: ₹{ledger.total_balance}")
 
-        # Check group balance (NEW check not in can_withdraw())
+        # Check group balance
         if wallet.balance < total_amount:
             raise WithdrawalError(
                 f"Insufficient group balance. Required: ₹{total_amount}, Available: ₹{wallet.balance}")
@@ -70,7 +67,7 @@ def create_withdrawal_request(user_id, group_id, total_amount, membership_action
             principal_amount = 0
             interest_amount = 0
 
-        # Create withdrawal request
+        # Create withdrawal request with reason
         withdrawal = WithdrawalRequest(
             user_id=user_id,
             group_id=group_id,
@@ -79,6 +76,7 @@ def create_withdrawal_request(user_id, group_id, total_amount, membership_action
             total_amount=total_amount,
             status=WithdrawalStatus.PENDING.value,
             membership_action=membership_action,
+            withdrawal_reason=reason,  # Store member's reason here
             idempotency_key=f"withdraw_{user_id}_{group_id}_{uuid.uuid4().hex[:16]}"
         )
 
@@ -93,7 +91,6 @@ def create_withdrawal_request(user_id, group_id, total_amount, membership_action
     except Exception as e:
         db.session.rollback()
         raise WithdrawalError(f"Failed to create withdrawal request: {str(e)}")
-
 
 # ============================================================
 # APPROVE WITHDRAWAL

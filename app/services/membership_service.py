@@ -331,7 +331,6 @@ def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
             withdrawal = WithdrawalRequest(
                 user_id=user_id,
                 group_id=group_id,
-                withdrawal_type='principal_only',
                 principal_amount=principal_amount,
                 interest_amount=0.0,
                 total_amount=principal_amount,
