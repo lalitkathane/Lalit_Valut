@@ -1,66 +1,621 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Register - Bachat Gat{% endblock %}
+{% block title %}Register - SaveGroup{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Registration page specific styles */
+    .registration-page {
+        min-height: calc(100vh - 80px);
+        display: flex;
+        align-items: center;
+        padding: 40px 20px;
+        background-color: var(--white);
+    }
+
+    .registration-wrapper {
+        display: flex;
+        background: var(--white);
+        border-radius: var(--border-radius-lg, 20px);
+        overflow: hidden;
+        box-shadow: var(--shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.1));
+        max-width: 1100px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    /* Left Column - Image */
+    .registration-left {
+        flex: 1;
+        position: relative;
+        min-height: 600px;
+        background: linear-gradient(135deg, var(--secondary-color) 0%, #1a365d 100%);
+    }
+
+    .registration-image {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .registration-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        opacity: 0.2;
+    }
+
+    .image-content {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 60px;
+        color: white;
+    }
+
+    .image-content h2 {
+        font-size: 36px;
+        margin-bottom: 20px;
+        font-weight: 700;
+        color: white;
+    }
+
+    .image-content p {
+        font-size: 16px;
+        opacity: 0.9;
+        margin-bottom: 40px;
+        line-height: 1.6;
+    }
+
+    .benefits {
+        margin-top: 40px;
+    }
+
+    .benefit-item {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 20px;
+    }
+
+    .benefit-icon {
+        background: rgba(0, 184, 148, 0.2);
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+        flex-shrink: 0;
+    }
+
+    .benefit-icon i {
+        font-size: 20px;
+        color: var(--primary-color);
+    }
+
+    .benefit-text h4 {
+        font-size: 16px;
+        margin-bottom: 4px;
+        color: white;
+        font-weight: 600;
+    }
+
+    .benefit-text p {
+        font-size: 14px;
+        opacity: 0.8;
+        line-height: 1.5;
+    }
+
+    /* Right Column - Form */
+    .registration-right {
+        flex: 1;
+        padding: 60px 50px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .form-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+
+    .form-header h1 {
+        font-size: 32px;
+        color: var(--secondary-color);
+        margin-bottom: 10px;
+        font-weight: 700;
+    }
+
+    .form-header p {
+        color: var(--text-color);
+        font-size: 16px;
+    }
+
+    .form-container {
+        width: 100%;
+        max-width: 400px;
+        margin: 0 auto;
+    }
+
+    /* Form styles using your existing patterns */
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--secondary-color);
+        font-weight: 500;
+        font-size: 14px;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid var(--border-color, #e2e8f0);
+        border-radius: var(--border-radius, 8px);
+        font-size: 16px;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.3s ease;
+        background: var(--white);
+        color: var(--secondary-color);
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.1);
+    }
+
+    .password-hint {
+        display: flex;
+        align-items: center;
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--text-color);
+    }
+
+    .password-hint i {
+        margin-right: 6px;
+        color: var(--primary-color);
+    }
+
+    .terms-agreement {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 24px;
+    }
+
+    .terms-agreement input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        margin-right: 10px;
+        margin-top: 3px;
+        accent-color: var(--primary-color);
+        flex-shrink: 0;
+    }
+
+    .terms-agreement label {
+        margin-bottom: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        cursor: pointer;
+        color: var(--text-color);
+    }
+
+    .terms-agreement a {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .terms-agreement a:hover {
+        text-decoration: underline;
+    }
+
+    /* Button - using your existing button styles */
+    .btn-register {
+        width: 100%;
+        padding: 14px 28px;
+        background: var(--primary-color);
+        color: var(--white);
+        border: none;
+        border-radius: var(--border-radius, 8px);
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-bottom: 24px;
+    }
+
+    .btn-register:hover {
+        background: #00a884;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 184, 148, 0.3);
+    }
+
+    .btn-register:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+
+    .divider {
+        display: flex;
+        align-items: center;
+        margin: 24px 0;
+        color: var(--text-color);
+        font-size: 14px;
+    }
+
+    .divider::before,
+    .divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border-color, #e2e8f0);
+    }
+
+    .divider span {
+        padding: 0 15px;
+        background: var(--white);
+        position: relative;
+    }
+
+    .social-login {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+
+    .btn-social {
+        flex: 1;
+        padding: 12px;
+        border: 2px solid var(--border-color, #e2e8f0);
+        background: var(--white);
+        color: var(--secondary-color);
+        border-radius: var(--border-radius, 8px);
+        font-weight: 500;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    .btn-social:hover {
+        border-color: var(--primary-color);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-sm, 0 4px 12px rgba(0, 0, 0, 0.1));
+    }
+
+    .btn-social i {
+        font-size: 18px;
+    }
+
+    .auth-footer {
+        text-align: center;
+        margin-top: 24px;
+    }
+
+    .auth-footer p {
+        color: var(--text-color);
+        font-size: 14px;
+    }
+
+    .auth-footer a {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .auth-footer a:hover {
+        text-decoration: underline;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 992px) {
+        .registration-wrapper {
+            flex-direction: column;
+            max-width: 600px;
+        }
+
+        .registration-left {
+            min-height: 300px;
+        }
+
+        .image-content {
+            padding: 40px 30px;
+        }
+
+        .image-content h2 {
+            font-size: 28px;
+            margin-bottom: 15px;
+        }
+
+        .registration-right {
+            padding: 40px 30px;
+        }
+
+        .form-header h1 {
+            font-size: 28px;
+        }
+
+        .benefits {
+            display: none;
+        }
+    }
+
+    @media (max-width: 576px) {
+        .registration-page {
+            padding: 20px 15px;
+        }
+
+        .registration-wrapper {
+            border-radius: 12px;
+        }
+
+        .registration-right {
+            padding: 30px 20px;
+        }
+
+        .form-header h1 {
+            font-size: 24px;
+        }
+
+        .social-login {
+            flex-direction: column;
+        }
+
+        .form-control {
+            padding: 10px 14px;
+            font-size: 15px;
+        }
+
+        .btn-register {
+            padding: 12px;
+            font-size: 15px;
+        }
+
+        .image-content {
+            padding: 30px 20px;
+        }
+
+        .image-content h2 {
+            font-size: 24px;
+        }
+    }
+
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+        .registration-wrapper {
+            background: var(--dark-card-bg, #1a1a1a);
+        }
+
+        .form-control {
+            background: var(--dark-input-bg, #2d2d2d);
+            border-color: var(--dark-border-color, #404040);
+            color: var(--dark-text-primary, #ffffff);
+        }
+
+        .form-label {
+            color: var(--dark-text-primary, #ffffff);
+        }
+
+        .terms-agreement label {
+            color: var(--dark-text-primary, #ffffff);
+        }
+
+        .btn-social {
+            background: var(--dark-card-bg, #1a1a1a);
+            color: var(--dark-text-primary, #ffffff);
+            border-color: var(--dark-border-color, #404040);
+        }
+
+        .divider span {
+            background: var(--dark-card-bg, #1a1a1a);
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-5">
-        <div class="card">
-            <div class="card-body p-5">
-                <h3 class="text-center mb-4">
-                    <i class="bi bi-person-plus text-primary"></i> Create Account
-                </h3>
+<div class="registration-page">
+    <div class="container">
+        <div class="registration-wrapper">
+            <!-- Left Column: Branding & Benefits -->
+            <div class="registration-left">
+                <div class="registration-image">
+                    <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+                         alt="Digital savings group illustration"
+                         loading="lazy">
+                    <div class="image-content">
+                        <h2>Join Our Community</h2>
+                        <p>Start your digital savings journey with transparency, security, and ease.</p>
 
-                <form method="POST" action="{{ url_for('auth.register') }}">
-                    <div class="mb-3">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" name="name" class="form-control"
-                               placeholder="Enter your name" required>
+                        <div class="benefits">
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i class="bi bi-shield-check"></i>
+                                </div>
+                                <div class="benefit-text">
+                                    <h4>Bank-Level Security</h4>
+                                    <p>Your data is encrypted and protected</p>
+                                </div>
+                            </div>
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i class="bi bi-graph-up"></i>
+                                </div>
+                                <div class="benefit-text">
+                                    <h4>Grow Together</h4>
+                                    <p>Collective savings with fair interest distribution</p>
+                                </div>
+                            </div>
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i class="bi bi-people"></i>
+                                </div>
+                                <div class="benefit-text">
+                                    <h4>Community First</h4>
+                                    <p>Join thousands of successful savings groups</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                </div>
+            </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Email Address</label>
-                        <input type="email" name="email" class="form-control"
-                               placeholder="Enter your email" required>
-                    </div>
+            <!-- Right Column: Registration Form -->
+            <div class="registration-right">
+                <div class="form-header">
+                    <h1>Create Account</h1>
+                    <p>Get started in just a few minutes</p>
+                </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Mobile Number</label>
-                        <input type="tel" name="phone" class="form-control"
-                               placeholder="Enter 10-digit mobile number"
-                               pattern="[6-9][0-9]{9}"
-                               title="Enter a valid 10-digit Indian mobile number"
-                               required>
-                        <small class="text-muted">Enter without country code (e.g., 9876543210)</small>
-                    </div>
+                <div class="form-container">
+                    <form method="POST" action="{{ url_for('auth.register') }}" class="registration-form" id="registerForm">
+                        <div class="form-group">
+                            <label for="name" class="form-label">Full Name</label>
+                            <input type="text" id="name" name="name" class="form-control" required
+                                   placeholder="Enter your full name">
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-control"
-                               placeholder="Create password (min 6 chars)"
-                               minlength="6"
-                               required>
-                    </div>
+                        <div class="form-group">
+                            <label for="email" class="form-label">Email Address</label>
+                            <input type="email" id="email" name="email" class="form-control" required
+                                   placeholder="you@example.com">
+                        </div>
 
-                    <div class="mb-4">
-                        <label class="form-label">Confirm Password</label>
-                        <input type="password" name="confirm_password" class="form-control"
-                               placeholder="Confirm your password"
-                               minlength="6"
-                               required>
-                    </div>
+                        <div class="form-group">
+                            <label for="phone" class="form-label">Phone Number</label>
+                            <input type="tel" id="phone" name="phone" class="form-control" required
+                                   placeholder="+91 9876543210">
+                        </div>
 
-                    <button type="submit" class="btn btn-primary w-100 mb-3">
-                        <i class="bi bi-check-lg"></i> Register
-                    </button>
-                </form>
+                        <div class="form-group">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" id="password" name="password" class="form-control" required
+                                   placeholder="Create a strong password">
+                            <div class="password-hint">
+                                <i class="bi bi-info-circle"></i>
+                                At least 8 characters with letters and numbers
+                            </div>
+                        </div>
 
-                <p class="text-center text-muted mb-0">
-                    Already have an account?
-                    <a href="{{ url_for('auth.login') }}">Login here</a>
-                </p>
+                        <div class="form-group">
+                            <label for="confirm_password" class="form-label">Confirm Password</label>
+                            <input type="password" id="confirm_password" name="confirm_password" class="form-control" required
+                                   placeholder="Re-enter your password">
+                        </div>
+
+                        <div class="form-group terms-agreement">
+                            <input type="checkbox" id="terms" name="terms" required>
+                            <label for="terms">
+                                I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
+                            </label>
+                        </div>
+
+                        <button type="submit" class="btn-register" id="submitBtn">
+                            <span class="btn-text">Create Account</span>
+                            <span class="btn-loader" style="display: none;">
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                Creating account...
+                            </span>
+                        </button>
+
+                        <div class="divider">
+                            <span>or sign up with</span>
+                        </div>
+
+                        <div class="social-login">
+                            <button type="button" class="btn-social" data-provider="google">
+                                <i class="bi bi-google"></i>
+                                <span>Google</span>
+                            </button>
+                            <button type="button" class="btn-social" data-provider="facebook">
+                                <i class="bi bi-facebook"></i>
+                                <span>Facebook</span>
+                            </button>
+                        </div>
+
+                        <div class="auth-footer">
+                            <p>Already have an account? <a href="{{ url_for('auth.login') }}">Sign In</a></p>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Form submission handling - Minimal client-side validation
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('registerForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const btnText = submitBtn.querySelector('.btn-text');
+        const btnLoader = submitBtn.querySelector('.btn-loader');
+
+        // Remove any duplicate validation logic since server handles it via helperfunctions.py
+        form.addEventListener('submit', function(e) {
+            // Just show loading state - server will handle validation
+            btnText.style.display = 'none';
+            btnLoader.style.display = 'inline-flex';
+            submitBtn.disabled = true;
+
+            // Form will submit normally - server validation in auth.py uses helperfunctions.py
+        });
+
+        // Social login buttons (basic notification)
+        document.querySelectorAll('.btn-social').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const provider = this.getAttribute('data-provider');
+                // Simple notification - actual implementation would redirect to OAuth
+                alert(`${provider.charAt(0).toUpperCase() + provider.slice(1)} sign up coming soon!`);
+            });
+        });
+
+        // Password strength indicator (visual only, no validation)
+        const passwordInput = document.getElementById('password');
+        const passwordHint = document.querySelector('.password-hint');
+
+        if (passwordInput && passwordHint) {
+            passwordInput.addEventListener('input', function() {
+                const password = this.value;
+                if (password.length === 0) {
+                    passwordHint.style.color = '';
+                    return;
+                }
+
+                // Visual feedback only - actual validation is server-side
+                const hasLetters = /[A-Za-z]/.test(password);
+                const hasNumbers = /\d/.test(password);
+                const isLong = password.length >= 8;
+
+                if (isLong && hasLetters && hasNumbers) {
+                    passwordHint.style.color = 'var(--primary-color)';
+                } else if (password.length >= 6) {
+                    passwordHint.style.color = 'var(--warning-color, #ffc107)';
+                } else {
+                    passwordHint.style.color = 'var(--danger-color, #dc3545)';
+                }
+            });
+        }
+    });
+</script>
 {% endblock %}

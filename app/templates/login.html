@@ -1,46 +1,660 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Login - Bachat Gat{% endblock %}
+{% block title %}Login - SaveGroup{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Login page specific styles */
+    .login-page {
+        min-height: calc(100vh - 80px);
+        display: flex;
+        align-items: center;
+        padding: 40px 20px;
+        background-color: var(--white);
+    }
+
+    .login-wrapper {
+        display: flex;
+        background: var(--white);
+        border-radius: var(--border-radius-lg, 20px);
+        overflow: hidden;
+        box-shadow: var(--shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.1));
+        max-width: 1100px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    /* Left Column - Image & Benefits */
+    .login-left {
+        flex: 1;
+        position: relative;
+        min-height: 600px;
+        background: linear-gradient(135deg, var(--secondary-color) 0%, #1a365d 100%);
+    }
+
+    .login-image {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .login-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        opacity: 0.2;
+    }
+
+    .image-content {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 60px;
+        color: white;
+    }
+
+    .image-content h2 {
+        font-size: 36px;
+        margin-bottom: 20px;
+        font-weight: 700;
+        color: white;
+    }
+
+    .image-content p {
+        font-size: 16px;
+        opacity: 0.9;
+        margin-bottom: 40px;
+        line-height: 1.6;
+    }
+
+    .benefits {
+        margin-top: 40px;
+    }
+
+    .benefit-item {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 20px;
+    }
+
+    .benefit-icon {
+        background: rgba(0, 184, 148, 0.2);
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+        flex-shrink: 0;
+    }
+
+    .benefit-icon i {
+        font-size: 20px;
+        color: var(--primary-color);
+    }
+
+    .benefit-text h4 {
+        font-size: 16px;
+        margin-bottom: 4px;
+        color: white;
+        font-weight: 600;
+    }
+
+    .benefit-text p {
+        font-size: 14px;
+        opacity: 0.8;
+        line-height: 1.5;
+    }
+
+    /* Right Column - Form */
+    .login-right {
+        flex: 1;
+        padding: 60px 50px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .form-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+
+    .form-header h1 {
+        font-size: 32px;
+        color: var(--secondary-color);
+        margin-bottom: 10px;
+        font-weight: 700;
+    }
+
+    .form-header p {
+        color: var(--text-color);
+        font-size: 16px;
+    }
+
+    .form-container {
+        width: 100%;
+        max-width: 400px;
+        margin: 0 auto;
+    }
+
+    /* Form styles */
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--secondary-color);
+        font-weight: 500;
+        font-size: 14px;
+    }
+
+    .form-label-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid var(--border-color, #e2e8f0);
+        border-radius: var(--border-radius, 8px);
+        font-size: 16px;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.3s ease;
+        background: var(--white);
+        color: var(--secondary-color);
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.1);
+    }
+
+    .forgot-link {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .forgot-link:hover {
+        text-decoration: underline;
+    }
+
+    .remember-me {
+        display: flex;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+
+    .remember-me input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        margin-right: 10px;
+        accent-color: var(--primary-color);
+        flex-shrink: 0;
+    }
+
+    .remember-me label {
+        margin-bottom: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        cursor: pointer;
+        color: var(--text-color);
+    }
+
+    /* Button */
+    .btn-login {
+        width: 100%;
+        padding: 14px 28px;
+        background: var(--primary-color);
+        color: var(--white);
+        border: none;
+        border-radius: var(--border-radius, 8px);
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .btn-login:hover {
+        background: #00a884;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 184, 148, 0.3);
+    }
+
+    .btn-login:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+
+    .divider {
+        display: flex;
+        align-items: center;
+        margin: 24px 0;
+        color: var(--text-color);
+        font-size: 14px;
+    }
+
+    .divider::before,
+    .divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border-color, #e2e8f0);
+    }
+
+    .divider span {
+        padding: 0 15px;
+        background: var(--white);
+        position: relative;
+    }
+
+    .social-login {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+
+    .btn-social {
+        flex: 1;
+        padding: 12px;
+        border: 2px solid var(--border-color, #e2e8f0);
+        background: var(--white);
+        color: var(--secondary-color);
+        border-radius: var(--border-radius, 8px);
+        font-weight: 500;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    .btn-social:hover {
+        border-color: var(--primary-color);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-sm, 0 4px 12px rgba(0, 0, 0, 0.1));
+    }
+
+    .btn-social i {
+        font-size: 18px;
+    }
+
+    .auth-footer {
+        text-align: center;
+        margin-top: 24px;
+    }
+
+    .auth-footer p {
+        color: var(--text-color);
+        font-size: 14px;
+    }
+
+    .auth-footer a {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .auth-footer a:hover {
+        text-decoration: underline;
+    }
+
+    /* Flash Messages */
+    .alert {
+        border-radius: 8px;
+        border: none;
+        padding: 14px 18px;
+        margin-bottom: 20px;
+        font-family: 'Inter', sans-serif;
+        animation: slideIn 0.3s ease;
+    }
+
+    .alert-success {
+        background-color: #d1f7ea;
+        color: #0a7254;
+        border-left: 4px solid var(--primary-color);
+    }
+
+    .alert-danger {
+        background-color: #ffe0e0;
+        color: #dc3545;
+        border-left: 4px solid #dc3545;
+    }
+
+    .alert-info {
+        background-color: #e0f2ff;
+        color: #0d6efd;
+        border-left: 4px solid #0d6efd;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Responsive Design */
+    @media (max-width: 992px) {
+        .login-wrapper {
+            flex-direction: column;
+            max-width: 600px;
+        }
+
+        .login-left {
+            min-height: 300px;
+        }
+
+        .image-content {
+            padding: 40px 30px;
+        }
+
+        .image-content h2 {
+            font-size: 28px;
+            margin-bottom: 15px;
+        }
+
+        .login-right {
+            padding: 40px 30px;
+        }
+
+        .form-header h1 {
+            font-size: 28px;
+        }
+
+        .benefits {
+            display: none;
+        }
+    }
+
+    @media (max-width: 576px) {
+        .login-page {
+            padding: 20px 15px;
+        }
+
+        .login-wrapper {
+            border-radius: 12px;
+        }
+
+        .login-right {
+            padding: 30px 20px;
+        }
+
+        .form-header h1 {
+            font-size: 24px;
+        }
+
+        .social-login {
+            flex-direction: column;
+        }
+
+        .form-control {
+            padding: 10px 14px;
+            font-size: 15px;
+        }
+
+        .btn-login {
+            padding: 12px;
+            font-size: 15px;
+        }
+
+        .image-content {
+            padding: 30px 20px;
+        }
+
+        .image-content h2 {
+            font-size: 24px;
+        }
+    }
+
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+        .login-wrapper {
+            background: var(--dark-card-bg, #1a1a1a);
+        }
+
+        .form-control {
+            background: var(--dark-input-bg, #2d2d2d);
+            border-color: var(--dark-border-color, #404040);
+            color: var(--dark-text-primary, #ffffff);
+        }
+
+        .form-label {
+            color: var(--dark-text-primary, #ffffff);
+        }
+
+        .remember-me label {
+            color: var(--dark-text-primary, #ffffff);
+        }
+
+        .btn-social {
+            background: var(--dark-card-bg, #1a1a1a);
+            color: var(--dark-text-primary, #ffffff);
+            border-color: var(--dark-border-color, #404040);
+        }
+
+        .divider span {
+            background: var(--dark-card-bg, #1a1a1a);
+        }
+
+        .forgot-link {
+            color: var(--primary-color);
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-5">
-        <div class="card">
-            <div class="card-body p-5">
-                <h3 class="text-center mb-4">
-                    <i class="bi bi-box-arrow-in-right text-primary"></i> Login
-                </h3>
+<div class="login-page">
+    <div class="container">
+        <div class="login-wrapper">
+            <!-- Left Column: Branding & Benefits -->
+            <div class="login-left">
+                <div class="login-image">
+                    <img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+                         alt="Secure login illustration"
+                         loading="lazy">
+                    <div class="image-content">
+                        <h2>Secure Access</h2>
+                        <p>Your financial data is protected with industry-leading security measures and bank-level encryption.</p>
 
-                <form method="POST" action="{{ url_for('auth.login') }}">
-                    <div class="mb-3">
-                        <label class="form-label">Email or Mobile Number</label>
-                        <input type="text" name="identity" class="form-control"
-                               placeholder="Enter email or 10-digit mobile number" required>
-                        <small class="text-muted">Use your registered email or mobile</small>
+                        <div class="benefits">
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i class="bi bi-shield-check"></i>
+                                </div>
+                                <div class="benefit-text">
+                                    <h4>End-to-End Encryption</h4>
+                                    <p>All data is encrypted in transit and at rest</p>
+                                </div>
+                            </div>
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i class="bi bi-eye-slash"></i>
+                                </div>
+                                <div class="benefit-text">
+                                    <h4>Privacy First</h4>
+                                    <p>Zero-knowledge proof for maximum privacy</p>
+                                </div>
+                            </div>
+                            <div class="benefit-item">
+                                <div class="benefit-icon">
+                                    <i class="bi bi-phone"></i>
+                                </div>
+                                <div class="benefit-text">
+                                    <h4>Multi-Device Access</h4>
+                                    <p>Secure access from any device with session management</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                </div>
+            </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-control"
-                               placeholder="Enter your password" required>
-                    </div>
+            <!-- Right Column: Login Form -->
+            <div class="login-right">
+                <div class="form-header">
+                    <h1>Welcome Back</h1>
+                    <p>Sign in to access your groups and continue your savings journey</p>
+                </div>
 
-                    <div class="mb-4 form-check">
-                        <input type="checkbox" name="remember" class="form-check-input" id="remember">
-                        <label class="form-check-label" for="remember">Remember me</label>
-                    </div>
+                <div class="form-container">
+                    <!-- Flash Messages -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
 
-                    <button type="submit" class="btn btn-primary w-100 mb-3">
-                        <i class="bi bi-box-arrow-in-right"></i> Login
-                    </button>
-                </form>
+                    <form method="POST" action="{{ url_for('auth.login') }}" class="login-form" id="loginForm">
+                        <div class="form-group">
+                            <div class="form-label-row">
+                                <label for="identity" class="form-label">Email or Phone Number</label>
+                            </div>
+                            <input type="text" id="identity" name="identity" class="form-control" required
+                                   placeholder="you@example.com or +91 9876543210">
+                        </div>
 
-                <p class="text-center text-muted mb-0">
-                    Don't have an account?
-                    <a href="{{ url_for('auth.register') }}">Register here</a>
-                </p>
+                        <div class="form-group">
+                            <div class="form-label-row">
+                                <label for="password" class="form-label">Password</label>
+                                <a href="#" class="forgot-link">Forgot password?</a>
+                            </div>
+                            <input type="password" id="password" name="password" class="form-control" required
+                                   placeholder="Enter your password">
+                        </div>
+
+                        <div class="remember-me">
+                            <input type="checkbox" id="remember" name="remember">
+                            <label for="remember">Remember me for 30 days</label>
+                        </div>
+
+                        <button type="submit" class="btn-login" id="submitBtn">
+                            <span class="btn-text">Sign In</span>
+                            <span class="btn-loader" style="display: none;">
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                Signing in...
+                            </span>
+                        </button>
+
+                        <div class="divider">
+                            <span>or continue with</span>
+                        </div>
+
+                        <div class="social-login">
+                            <button type="button" class="btn-social" data-provider="google">
+                                <i class="bi bi-google"></i>
+                                <span>Google</span>
+                            </button>
+                            <button type="button" class="btn-social" data-provider="facebook">
+                                <i class="bi bi-facebook"></i>
+                                <span>Facebook</span>
+                            </button>
+                        </div>
+
+                        <div class="auth-footer">
+                            <p>Don't have an account? <a href="{{ url_for('auth.register') }}">Sign up here</a></p>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Form submission handling
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('loginForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const btnText = submitBtn.querySelector('.btn-text');
+        const btnLoader = submitBtn.querySelector('.btn-loader');
+
+        form.addEventListener('submit', function(e) {
+            const identity = document.getElementById('identity').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!identity) {
+                e.preventDefault();
+                alert('Please enter your email or phone number');
+                return;
+            }
+
+            if (!password) {
+                e.preventDefault();
+                alert('Please enter your password');
+                return;
+            }
+
+            if (password.length < 6) {
+                e.preventDefault();
+                alert('Password must be at least 6 characters long');
+                return;
+            }
+
+            // Show loading state
+            btnText.style.display = 'none';
+            btnLoader.style.display = 'inline-flex';
+            submitBtn.disabled = true;
+        });
+
+        // Social login buttons
+        document.querySelectorAll('.btn-social').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const provider = this.getAttribute('data-provider');
+                alert(`${provider.charAt(0).toUpperCase() + provider.slice(1)} login coming soon!`);
+            });
+        });
+
+        // Forgot password link
+        document.querySelector('.forgot-link').addEventListener('click', function(e) {
+            e.preventDefault();
+            alert('Password reset feature coming soon!');
+        });
+
+        // Auto-dismiss alerts after 5 seconds
+        setTimeout(() => {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 5000);
+    });
+</script>
 {% endblock %}
