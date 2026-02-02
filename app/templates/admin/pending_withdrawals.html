@@ -3,128 +3,130 @@
 {% block title %}Pending Withdrawals - {{ group.name }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2><i class="bi bi-cash-coin text-primary"></i> Pending Withdrawal Requests</h2>
-        <p class="text-muted mb-0">{{ group.name }}</p>
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-cash-coin text-primary"></i> Pending Withdrawal Requests</h2>
+            <p class="text-muted mb-0">{{ group.name }}</p>
+        </div>
+        <div>
+            <a href="{{ url_for('admin.admin_dashboard', group_id=group.id) }}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back to Admin
+            </a>
+            <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}" class="btn btn-outline-success">
+                <i class="bi bi-wallet2"></i> Wallet Balance
+            </a>
+        </div>
     </div>
-    <div>
-        <a href="{{ url_for('admin.admin_dashboard', group_id=group.id) }}" class="btn btn-outline-primary">
-            <i class="bi bi-arrow-left"></i> Back to Admin
-        </a>
-        <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}" class="btn btn-outline-success">
-            <i class="bi bi-wallet2"></i> Wallet Balance
-        </a>
-    </div>
-</div>
 
-{% if withdrawals %}
-<div class="row">
-    <!-- Wallet Balance Summary -->
-    <div class="col-md-12 mb-4">
-        <div class="card bg-light">
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4 text-center">
-                        <h6 class="text-muted">Group Balance</h6>
-                        <h3 class="text-primary">₹{{ "%.2f"|format(group.wallet.balance if group.wallet else 0) }}</h3>
+    {% if withdrawals %}
+    <div class="row">
+        <!-- Wallet Balance Summary -->
+        <div class="col-md-12 mb-4">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 text-center">
+                            <h6 class="text-muted">Group Balance</h6>
+                            <h3 class="text-primary">₹{{ "%.2f"|format(group.wallet.balance if group.wallet else 0) }}</h3>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <h6 class="text-muted">Pending Withdrawals</h6>
+                            <h3 class="text-warning">₹{{ "%.2f"|format(withdrawals|sum(attribute='total_amount')) }}</h3>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <h6 class="text-muted">Available Balance</h6>
+                            <h3 class="text-success">
+                                ₹{{ "%.2f"|format((group.wallet.balance if group.wallet else 0) - withdrawals|sum(attribute='total_amount')) }}
+                            </h3>
+                        </div>
                     </div>
-                    <div class="col-md-4 text-center">
-                        <h6 class="text-muted">Pending Withdrawals</h6>
-                        <h3 class="text-warning">₹{{ "%.2f"|format(withdrawals|sum(attribute='total_amount')) }}</h3>
-                    </div>
-                    <div class="col-md-4 text-center">
-                        <h6 class="text-muted">Available Balance</h6>
-                        <h3 class="text-success">
-                            ₹{{ "%.2f"|format((group.wallet.balance if group.wallet else 0) - withdrawals|sum(attribute='total_amount')) }}
-                        </h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Withdrawal Requests Table -->
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <i class="bi bi-clock"></i> {{ withdrawals|length }} Pending Withdrawal Request(s)
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Member</th>
+                                    <th>Amount Details</th>
+                                    <th>Requested</th>
+                                    <th>Membership Action</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for withdrawal in withdrawals %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ withdrawal.user.name }}</strong><br>
+                                        <small class="text-muted">ID: {{ withdrawal.user_id }}</small>
+                                    </td>
+                                    <td>
+                                        <div class="mb-1">
+                                            <small class="text-muted">Principal:</small>
+                                            <strong>₹{{ "%.2f"|format(withdrawal.principal_amount) }}</strong>
+                                        </div>
+                                        {% if withdrawal.interest_amount > 0 %}
+                                        <div class="mb-1">
+                                            <small class="text-muted">Interest:</small>
+                                            <strong>₹{{ "%.2f"|format(withdrawal.interest_amount) }}</strong>
+                                        </div>
+                                        {% endif %}
+                                        <div class="mt-1">
+                                            <small class="text-muted">Total:</small>
+                                            <h5 class="text-primary mb-0">₹{{ "%.2f"|format(withdrawal.total_amount) }}</h5>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {{ withdrawal.created_at.strftime('%d %b %Y') }}<br>
+                                        <small class="text-muted">{{ withdrawal.created_at.strftime('%I:%M %p') }}</small>
+                                    </td>
+                                    <td>
+                                        {% if withdrawal.membership_action == 'deactivate' %}
+                                        <span class="badge bg-danger">Will Leave Group</span>
+                                        {% else %}
+                                        <span class="badge bg-success">Stay in Group</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('admin.withdrawal_detail', withdrawal_id=withdrawal.id) }}"
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-eye"></i> Review
+                                            </a>
+                                            <form action="{{ url_for('admin.approve_withdrawal_route', withdrawal_id=withdrawal.id) }}"
+                                                  method="POST" class="d-inline">
+                                                <button type="submit" class="btn btn-sm btn-success"
+                                                        onclick="return confirm('Approve withdrawal of ₹{{ withdrawal.total_amount }}?')">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Withdrawal Requests Table -->
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header bg-warning text-dark">
-                <i class="bi bi-clock"></i> {{ withdrawals|length }} Pending Withdrawal Request(s)
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Member</th>
-                                <th>Amount Details</th>
-                                <th>Requested</th>
-                                <th>Membership Action</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for withdrawal in withdrawals %}
-                            <tr>
-                                <td>
-                                    <strong>{{ withdrawal.user.name }}</strong><br>
-                                    <small class="text-muted">ID: {{ withdrawal.user_id }}</small>
-                                </td>
-                                <td>
-                                    <div class="mb-1">
-                                        <small class="text-muted">Principal:</small>
-                                        <strong>₹{{ "%.2f"|format(withdrawal.principal_amount) }}</strong>
-                                    </div>
-                                    {% if withdrawal.interest_amount > 0 %}
-                                    <div class="mb-1">
-                                        <small class="text-muted">Interest:</small>
-                                        <strong>₹{{ "%.2f"|format(withdrawal.interest_amount) }}</strong>
-                                    </div>
-                                    {% endif %}
-                                    <div class="mt-1">
-                                        <small class="text-muted">Total:</small>
-                                        <h5 class="text-primary mb-0">₹{{ "%.2f"|format(withdrawal.total_amount) }}</h5>
-                                    </div>
-                                </td>
-                                <td>
-                                    {{ withdrawal.created_at.strftime('%d %b %Y') }}<br>
-                                    <small class="text-muted">{{ withdrawal.created_at.strftime('%I:%M %p') }}</small>
-                                </td>
-                                <td>
-                                    {% if withdrawal.membership_action == 'deactivate' %}
-                                    <span class="badge bg-danger">Will Leave Group</span>
-                                    {% else %}
-                                    <span class="badge bg-success">Stay in Group</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <div class="btn-group" role="group">
-                                        <a href="{{ url_for('admin.withdrawal_detail', withdrawal_id=withdrawal.id) }}"
-                                           class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-eye"></i> Review
-                                        </a>
-                                        <form action="{{ url_for('admin.approve_withdrawal_route', withdrawal_id=withdrawal.id) }}"
-                                              method="POST" class="d-inline">
-                                            <button type="submit" class="btn btn-sm btn-success"
-                                                    onclick="return confirm('Approve withdrawal of ₹{{ withdrawal.total_amount }}?')">
-                                                <i class="bi bi-check-lg"></i>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+    {% else %}
+    <div class="text-center py-5">
+        <i class="bi bi-check-circle text-success" style="font-size: 4rem;"></i>
+        <h4 class="mt-3 text-muted">No pending withdrawal requests</h4>
+        <p class="text-muted">All withdrawal requests have been processed.</p>
     </div>
+    {% endif %}
 </div>
-{% else %}
-<div class="text-center py-5">
-    <i class="bi bi-check-circle text-success" style="font-size: 4rem;"></i>
-    <h4 class="mt-3 text-muted">No pending withdrawal requests</h4>
-    <p class="text-muted">All withdrawal requests have been processed.</p>
-</div>
-{% endif %}
 {% endblock %}

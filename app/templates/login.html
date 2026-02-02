@@ -1,46 +1,166 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Login - Bachat Gat{% endblock %}
+{% block title %}Login - SaveGroup{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-5">
-        <div class="card">
-            <div class="card-body p-5">
-                <h3 class="text-center mb-4">
-                    <i class="bi bi-box-arrow-in-right text-primary"></i> Login
-                </h3>
+<div class="auth-page">
+    <div class="container">
+        <div class="auth-wrapper">
+            <!-- Left Column: Branding & Benefits -->
+            <div class="auth-left">
+                <div class="auth-image">
+                    <img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+                         alt="Secure login illustration"
+                         loading="lazy">
+                    <div class="auth-image-content">
+                        <h2>Secure Access</h2>
+                        <p>Your financial data is protected with industry-leading security measures and bank-level encryption.</p>
 
-                <form method="POST" action="{{ url_for('auth.login') }}">
-                    <div class="mb-3">
-                        <label class="form-label">Email or Mobile Number</label>
-                        <input type="text" name="identity" class="form-control"
-                               placeholder="Enter email or 10-digit mobile number" required>
-                        <small class="text-muted">Use your registered email or mobile</small>
+                        <div class="auth-benefits">
+                            <div class="auth-benefit-item">
+                                <div class="auth-benefit-icon">
+                                    <i class="bi bi-shield-check"></i>
+                                </div>
+                                <div class="auth-benefit-text">
+                                    <h4>End-to-End Encryption</h4>
+                                    <p>All data is encrypted in transit and at rest</p>
+                                </div>
+                            </div>
+                            <div class="auth-benefit-item">
+                                <div class="auth-benefit-icon">
+                                    <i class="bi bi-eye-slash"></i>
+                                </div>
+                                <div class="auth-benefit-text">
+                                    <h4>Privacy First</h4>
+                                    <p>Zero-knowledge proof for maximum privacy</p>
+                                </div>
+                            </div>
+                            <div class="auth-benefit-item">
+                                <div class="auth-benefit-icon">
+                                    <i class="bi bi-phone"></i>
+                                </div>
+                                <div class="auth-benefit-text">
+                                    <h4>Multi-Device Access</h4>
+                                    <p>Secure access from any device with session management</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                </div>
+            </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-control"
-                               placeholder="Enter your password" required>
-                    </div>
+            <!-- Right Column: Login Form -->
+            <div class="auth-right">
+                <div class="auth-form-header">
+                    <h1>Welcome Back</h1>
+                    <p>Sign in to access your groups and continue your savings journey</p>
+                </div>
 
-                    <div class="mb-4 form-check">
-                        <input type="checkbox" name="remember" class="form-check-input" id="remember">
-                        <label class="form-check-label" for="remember">Remember me</label>
-                    </div>
+                <div class="auth-form-container">
+                    <!-- Flash Messages -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="auth-alert auth-alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
 
-                    <button type="submit" class="btn btn-primary w-100 mb-3">
-                        <i class="bi bi-box-arrow-in-right"></i> Login
-                    </button>
-                </form>
+                    <form method="POST" action="{{ url_for('auth.login') }}" class="login-form" id="loginForm">
+                        <div class="auth-form-group">
+                            <div class="auth-form-label-row">
+                                <label for="identity" class="auth-form-label">Email or Phone Number</label>
+                            </div>
+                            <input type="text" id="identity" name="identity" class="auth-form-control" required
+                                   placeholder="you@example.com or +91 9876543210">
+                        </div>
 
-                <p class="text-center text-muted mb-0">
-                    Don't have an account?
-                    <a href="{{ url_for('auth.register') }}">Register here</a>
-                </p>
+                        <div class="auth-form-group">
+                            <div class="auth-form-label-row">
+                                <label for="password" class="auth-form-label">Password</label>
+                                <a href="#" class="auth-forgot-link">Forgot password?</a>
+                            </div>
+                            <input type="password" id="password" name="password" class="auth-form-control" required
+                                   placeholder="Enter your password">
+                        </div>
+
+                        <div class="auth-remember-me">
+                            <input type="checkbox" id="remember" name="remember">
+                            <label for="remember">Remember me for 30 days</label>
+                        </div>
+
+                        <button type="submit" class="auth-btn-primary" id="submitBtn">
+                            <span class="btn-text">Sign In</span>
+                            <span class="btn-loader" style="display: none;">
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                Signing in...
+                            </span>
+                        </button>
+
+                        <div class="auth-divider">
+                            <span>or continue with</span>
+                        </div>
+
+                        <div class="auth-social-login">
+                            <button type="button" class="auth-btn-social" data-provider="google">
+                                <i class="bi bi-google"></i>
+                                <span>Google</span>
+                            </button>
+                            <button type="button" class="auth-btn-social" data-provider="facebook">
+                                <i class="bi bi-facebook"></i>
+                                <span>Facebook</span>
+                            </button>
+                        </div>
+
+                        <div class="auth-footer">
+                            <p>Don't have an account? <a href="{{ url_for('auth.register') }}">Sign up here</a></p>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+<script>
+    // Login-specific validation (kept separate since it's different from register)
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('loginForm');
+
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const identity = document.getElementById('identity').value.trim();
+                const password = document.getElementById('password').value;
+
+                if (!identity) {
+                    e.preventDefault();
+                    alert('Please enter your email or phone number');
+                    return;
+                }
+
+                if (!password) {
+                    e.preventDefault();
+                    alert('Please enter your password');
+                    return;
+                }
+
+                if (password.length < 6) {
+                    e.preventDefault();
+                    alert('Password must be at least 6 characters long');
+                    return;
+                }
+            });
+        }
+    });
+</script>
 {% endblock %}

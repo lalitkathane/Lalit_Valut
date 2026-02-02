@@ -1,62 +1,281 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ group.name }} - Bachat Gat{% endblock %}
+{% block title %}{{ group.name }} - SaveGroup{% endblock %}
+
+{% block extra_css %}
+<!-- Add validation CSS -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/validation.css') }}">
+<style>
+    /* Custom styles for group detail page */
+    .group-header-gradient {
+        height: 4px;
+        background: linear-gradient(90deg, #00b894, #00a884);
+    }
+
+    .group-icon-container {
+        width: 60px;
+        height: 60px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #00b89420, #00a88420);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 16px;
+        flex-shrink: 0;
+    }
+
+    .group-icon {
+        font-size: 1.8rem;
+        color: var(--primary-color);
+    }
+
+    .group-badge {
+        background-color: rgba(0, 184, 148, 0.08);
+        color: var(--secondary-color);
+        border: 1px solid rgba(0, 184, 148, 0.15);
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+
+    .balance-card {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        height: 100%;
+    }
+
+    .admin-badge {
+        background-color: rgba(255, 193, 7, 0.08);
+        color: #856404;
+        border-left: 3px solid #ffc107;
+        padding: 12px 16px;
+        border-radius: 10px;
+    }
+
+    .member-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background-color: rgba(0, 184, 148, 0.1);
+        color: var(--primary-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .member-avatar.admin {
+        background-color: rgba(255, 193, 7, 0.15);
+        color: #856404;
+    }
+
+    .loan-card {
+        border-left: 3px solid #ffc107;
+        transition: all 0.3s ease;
+        border-radius: 10px;
+    }
+
+    .loan-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+    }
+
+    .loan-card.user-request {
+        border-left: 3px solid var(--primary-color);
+    }
+
+    .action-btn {
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .action-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin: 12px 0;
+    }
+
+    /* Text wrapping classes */
+    .text-truncate-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .text-truncate-1 {
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .group-name {
+        word-break: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
+    }
+
+    .group-description {
+        word-break: break-word;
+        overflow-wrap: break-word;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .group-icon-container {
+            width: 50px;
+            height: 50px;
+            margin-right: 12px;
+        }
+
+        .group-icon {
+            font-size: 1.5rem;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+            gap: 6px;
+        }
+
+        .group-name {
+            font-size: 1.25rem;
+        }
+
+        .balance-card h2 {
+            font-size: 1.5rem !important;
+        }
+    }
+
+    @media (max-width: 576px) {
+        .group-icon-container {
+            width: 40px;
+            height: 40px;
+            margin-right: 10px;
+        }
+
+        .group-icon {
+            font-size: 1.2rem;
+        }
+
+        .group-name {
+            font-size: 1.1rem;
+        }
+
+        .group-description {
+            font-size: 0.9rem;
+        }
+
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .balance-card {
+            padding: 12px !important;
+        }
+
+        .action-btn {
+            padding: 6px 8px;
+            font-size: 0.75rem;
+        }
+
+        .balance-card h2 {
+            font-size: 1.3rem !important;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <!-- Group Header -->
-    <div class="card border-0 shadow-sm mb-4 overflow-hidden rounded-4">
-        <div class="bg-gradient" style="height: 6px; background: linear-gradient(90deg, #6366f1, #8b5cf6);"></div>
-        <div class="card-body p-4 p-lg-5">
-            <div class="row align-items-center g-4">
-                <div class="col-lg-7">
-                    <div class="d-flex align-items-start flex-column flex-lg-row text-center text-lg-start">
-                        <div class="rounded-4 bg-primary bg-opacity-10 p-4 me-lg-4 mb-3 mb-lg-0 shadow-sm flex-shrink-0">
-                            <i class="bi bi-people-fill text-primary display-5"></i>
+<div class="container py-3">
+    <!-- Group Header - Compact Design -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body p-3 p-md-4">
+            <div class="row align-items-center">
+                <!-- Left side: Group Info -->
+                <div class="col-lg-7 mb-3 mb-lg-0">
+                    <div class="d-flex align-items-start">
+                        <div class="group-icon-container">
+                            <i class="bi bi-people-fill group-icon"></i>
                         </div>
-                        <div class="flex-grow-1">
-                            <h1 class="h2 fw-bold mb-1 text-dark">{{ group.name }}</h1>
-                            <p class="text-muted mb-3">{{ group.description or 'Self-help savings group' }}</p>
-                            <div class="d-flex flex-wrap gap-2 justify-content-center justify-content-lg-start mb-3">
-                                <span class="badge bg-light text-dark border px-3 py-2">
-                                    <i class="bi bi-people-fill text-primary me-1"></i> {{ members|length }} Members
+                        <div class="flex-grow-1 min-width-0"> <!-- Added min-width-0 for proper text wrapping -->
+                            <!-- Group Name with proper wrapping -->
+                            <h1 class="h3 fw-bold mb-1 group-name" style="color: var(--secondary-color);">
+                                {{ group.name }}
+                            </h1>
+
+                            <!-- Group Description with truncation -->
+                            <p class="text-muted mb-2 small group-description">
+                                {{ group.description or 'Self-help savings group' }}
+                            </p>
+
+                            <!-- Group Stats - Compact Grid -->
+                            <div class="stats-grid">
+                                <span class="group-badge d-flex align-items-center justify-content-center small text-truncate-1">
+                                    <i class="bi bi-percent me-1"></i>
+                                    <span>{{ "%.1f"|format(group.default_interest_rate) }}% Rate</span>
                                 </span>
-                                <span class="badge bg-light text-dark border px-3 py-2">
-                                    <i class="bi bi-percent text-success me-1"></i> {{ "%.1f"|format(group.default_interest_rate) }}% Rate
-                                </span>
-                                <span class="badge bg-light text-dark border px-3 py-2">
-                                    <i class="bi bi-calendar3 text-info me-1"></i> {{ group.default_loan_duration_months }} Months
-                                </span>
-                                <span class="badge bg-light text-dark border px-3 py-2">
-                                    <i class="bi bi-cash-coin text-warning me-1"></i> ₹{{ "{:,.0f}".format(wallet.balance if wallet else 0) }}
+                                <span class="group-badge d-flex align-items-center justify-content-center small text-truncate-1">
+                                    <i class="bi bi-calendar3 me-1"></i>
+                                    <span>{{ group.default_loan_duration_months }} Months</span>
                                 </span>
                             </div>
-                            <div class="small text-muted">
-                                <i class="bi bi-info-circle me-1"></i> Created by <strong>{{ group.creator.name }}</strong> on {{ group.created_at.strftime('%d %b %Y') }}
+
+                            <!-- Group Creator Info -->
+                            <div class="small text-muted mt-2 text-truncate-1">
+                                <i class="bi bi-person me-1"></i> Created by <strong>{{ group.creator.name }}</strong> on {{ group.created_at.strftime('%d %b %Y') }}
                             </div>
                         </div>
                     </div>
                 </div>
 
+                <!-- Right side: Balance and Actions -->
                 <div class="col-lg-5">
-                    <div class="bg-light rounded-4 p-4 border shadow-sm h-100 d-flex align-items-center">
-                        <div class="row w-100 g-3 align-items-center">
-                            {% if wallet %}
-                            <div class="col-12 col-sm-6 text-center text-sm-start">
-                                <div class="small text-uppercase fw-bold text-muted mb-1">Group Balance</div>
-                                <h3 class="fw-bold text-dark mb-1">₹{{ "{:,.2f}".format(wallet.balance) }}</h3>
-                                <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}" class="small link-primary text-decoration-none fw-medium">
-                                    View Wallet Details <i class="bi bi-arrow-right ms-1"></i>
-                                </a>
+                    <div class="balance-card p-3 h-100 d-flex align-items-center">
+                        <div class="row align-items-center w-100 g-2">
+                            <!-- Group Balance Column -->
+                            <div class="col-md-7 col-7">
+                                <div class="mb-2">
+                                    <div class="small text-uppercase fw-bold text-muted mb-1">Group Balance</div>
+                                    <h2 class="fw-bold mb-0 text-truncate-1" style="color: var(--secondary-color); font-size: 1.8rem;">
+                                        ₹{{ "{:,.2f}".format(wallet.balance if wallet else 0) }}
+                                    </h2>
+                                </div>
                             </div>
-                            {% endif %}
-                            <div class="col-12 col-sm-6">
+
+                            <!-- Buttons Column -->
+                            <div class="col-md-5 col-5">
                                 <div class="d-grid gap-2">
-                                    <a href="{{ url_for('wallet.contribute', group_id=group.id) }}" class="btn btn-success btn-md fw-bold shadow-sm">
-                                        <i class="bi bi-plus-lg me-2"></i> Contribute
+                                    <a href="{{ url_for('wallet.contribute', group_id=group.id) }}"
+                                       class="btn btn-success action-btn text-truncate-1">
+                                        <i class="bi bi-plus-lg me-1"></i> Contribute
                                     </a>
-                                    <a href="{{ url_for('loans.create_loan', group_id=group.id) }}" class="btn btn-warning text-white btn-md fw-bold shadow-sm">
-                                        <i class="bi bi-cash-stack me-2"></i> Apply for Loan
+
+                                    <a href="{{ url_for('loans.create_loan', group_id=group.id) }}"
+                                       class="btn btn-warning text-white action-btn text-truncate-1">
+                                        <i class="bi bi-cash-stack me-1"></i> Apply Loan
                                     </a>
                                 </div>
                             </div>
@@ -67,71 +286,76 @@
         </div>
     </div>
 
+    <!-- Admin Panel - Compact -->
     {% if is_admin %}
-    <!-- Admin Panel -->
-    <div class="card border-0 shadow-sm mb-4 border-start border-4 border-primary">
-        <div class="card-body py-3">
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                <div class="d-flex align-items-center">
-                    <div class="bg-primary bg-opacity-10 rounded-circle p-2 me-3">
-                        <i class="bi bi-shield-check text-primary fs-5"></i>
-                    </div>
-                    <div>
-                        <h6 class="mb-0 fw-bold">Admin Controls</h6>
-                        <small class="text-muted">Group Administrator Privileges</small>
-                    </div>
+    <div class="admin-badge mb-3">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center min-width-0">
+                <div class="rounded-circle p-1 me-2" style="background-color: rgba(255, 193, 7, 0.2); flex-shrink: 0;">
+                    <i class="bi bi-shield-check" style="color: #856404; font-size: 0.9rem;"></i>
                 </div>
-                <div class="d-flex gap-2 flex-wrap">
-                    <a href="{{ url_for('admin.admin_dashboard', group_id=group.id) }}" class="btn btn-primary btn-sm">
-                        <i class="bi bi-speedometer2 me-1"></i> Dashboard
-                    </a>
-                    <a href="{{ url_for('groups.group_settings', group_id=group.id) }}" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-gear me-1"></i> Settings
-                    </a>
-                    <a href="{{ url_for('groups.add_member_route', group_id=group.id) }}" class="btn btn-outline-success btn-sm">
-                        <i class="bi bi-person-plus me-1"></i> Add Member
-                    </a>
-                    <a href="{{ url_for('groups.transfer_admin_route', group_id=group.id) }}" class="btn btn-outline-warning btn-sm">
-                        <i class="bi bi-arrow-left-right me-1"></i> Transfer Admin
-                    </a>
+                <div class="min-width-0">
+                    <h6 class="mb-0 fw-bold small text-truncate-1" style="color: #856404;">Admin Controls</h6>
+                    <small class="text-muted text-truncate-1 d-block">Group Administrator Privileges</small>
                 </div>
+            </div>
+            <div class="d-flex gap-1 flex-wrap">
+                <a href="{{ url_for('admin.admin_dashboard', group_id=group.id) }}"
+                   class="btn btn-primary btn-sm py-1 px-2 small text-truncate-1">
+                    <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                </a>
+                <a href="{{ url_for('groups.group_settings', group_id=group.id) }}"
+                   class="btn btn-outline-primary btn-sm py-1 px-2 small text-truncate-1">
+                    <i class="bi bi-gear me-1"></i> Settings
+                </a>
+                <a href="{{ url_for('groups.add_member_route', group_id=group.id) }}"
+                   class="btn btn-outline-success btn-sm py-1 px-2 small text-truncate-1">
+                    <i class="bi bi-person-plus me-1"></i> Add Member
+                </a>
+                <!-- Added Transfer Admin Button -->
+                <a href="{{ url_for('groups.transfer_admin_route', group_id=group.id) }}"
+                   class="btn btn-outline-warning btn-sm py-1 px-2 small text-truncate-1">
+                    <i class="bi bi-arrow-left-right me-1"></i> Transfer Admin
+                </a>
             </div>
         </div>
     </div>
 
-    <!-- Admin Alerts -->
+    <!-- Admin Alerts - Compact -->
     {% if awaiting_disbursement or pending_repayments %}
-    <div class="row g-3 mb-4">
+    <div class="row g-2 mb-3">
         {% if awaiting_disbursement %}
         <div class="col-md-6">
-            <div class="card border-0 bg-success bg-opacity-10 h-100">
-                <div class="card-body d-flex align-items-center">
-                    <div class="flex-grow-1">
-                        <h6 class="mb-1 fw-bold text-success">
-                            <i class="bi bi-cash me-1"></i> Loans Ready to Disburse
+            <div class="card border-0 shadow-sm h-100" style="background-color: rgba(0, 184, 148, 0.05); border-left: 3px solid var(--primary-color); border-radius: 8px;">
+                <div class="card-body p-2 d-flex align-items-center">
+                    <div class="flex-grow-1 min-width-0">
+                        <h6 class="mb-0 fw-bold small text-truncate-1" style="color: var(--primary-color);">
+                            <i class="bi bi-cash me-1"></i> Loans Ready
                         </h6>
-                        <p class="mb-0 small text-muted">{{ awaiting_disbursement|length }} approved loan(s) awaiting disbursement</p>
+                        <p class="mb-0 small text-muted text-truncate-1">{{ awaiting_disbursement|length }} awaiting disbursement</p>
                     </div>
-                    <a href="{{ url_for('admin.admin_dashboard', group_id=group.id) }}" class="btn btn-success btn-sm">
-                        Disburse <i class="bi bi-arrow-right ms-1"></i>
+                    <a href="{{ url_for('admin.admin_dashboard', group_id=group.id) }}"
+                       class="btn btn-sm py-0 px-2 text-truncate-1 flex-shrink-0" style="background-color: var(--primary-color); color: white; font-size: 0.8rem;">
+                        Disburse
                     </a>
                 </div>
             </div>
         </div>
         {% endif %}
-        
+
         {% if pending_repayments %}
         <div class="col-md-6">
-            <div class="card border-0 bg-info bg-opacity-10 h-100">
-                <div class="card-body d-flex align-items-center">
-                    <div class="flex-grow-1">
-                        <h6 class="mb-1 fw-bold text-info">
-                            <i class="bi bi-clock-history me-1"></i> Repayments to Review
+            <div class="card border-0 shadow-sm h-100" style="background-color: rgba(23, 162, 184, 0.05); border-left: 3px solid #17a2b8; border-radius: 8px;">
+                <div class="card-body p-2 d-flex align-items-center">
+                    <div class="flex-grow-1 min-width-0">
+                        <h6 class="mb-0 fw-bold small text-truncate-1" style="color: #17a2b8;">
+                            <i class="bi bi-clock-history me-1"></i> Repayments
                         </h6>
-                        <p class="mb-0 small text-muted">{{ pending_repayments|length }} repayment(s) pending approval</p>
+                        <p class="mb-0 small text-muted text-truncate-1">{{ pending_repayments|length }} pending approval</p>
                     </div>
-                    <a href="{{ url_for('admin.pending_repayments', group_id=group.id) }}" class="btn btn-info btn-sm text-white">
-                        Review <i class="bi bi-arrow-right ms-1"></i>
+                    <a href="{{ url_for('admin.pending_repayments', group_id=group.id) }}"
+                       class="btn btn-sm btn-info text-white py-0 px-2 text-truncate-1 flex-shrink-0" style="font-size: 0.8rem;">
+                        Review
                     </a>
                 </div>
             </div>
@@ -142,53 +366,61 @@
     {% endif %}
 
     <!-- Main Content -->
-    <div class="row g-4 align-items-stretch">
+    <div class="row g-3">
         <!-- Members Panel -->
         <div class="col-lg-5">
             <div class="card border-0 shadow-sm h-100">
-                <div class="card-header bg-white border-0 py-3 rounded-top-4">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h5 class="mb-0 fw-bold">
-                            <i class="bi bi-people-fill text-primary me-2"></i>Members
+                <div class="card-header bg-white border-0 py-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h5 class="mb-0 fw-bold small text-truncate-1">
+                            <i class="bi bi-people-fill me-1" style="color: var(--primary-color);"></i>Members
                         </h5>
-                        <span class="badge bg-primary bg-opacity-10 text-primary">{{ members|length }}</span>
+                        <span class="badge rounded-pill small flex-shrink-0" style="background-color: var(--primary-color);">{{ members|length }}</span>
                     </div>
                     <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-search"></i></span>
-                        <input type="text" id="memberSearch" class="form-control bg-light border-start-0" placeholder="Search members...">
+                        <span class="input-group-text bg-light border-end-0 py-1">
+                            <i class="bi bi-search small"></i>
+                        </span>
+                        <input type="text"
+                               id="memberSearch"
+                               class="form-control bg-light border-start-0 py-1 small"
+                               placeholder="Search members...">
                     </div>
                 </div>
-                <div class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
-                    {% for membership in members %}
-                    <div class="list-group-item border-0 border-bottom py-3 member-item">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <a href="{{ url_for('groups.view_member', group_id=group.id, user_id=membership.user.id) }}" 
-                               class="d-flex align-items-center text-decoration-none text-dark flex-grow-1">
-                                <div class="rounded-circle d-flex align-items-center justify-content-center me-3 
-                                            {% if membership.role == 'admin' %}bg-warning text-dark{% else %}bg-primary bg-opacity-10 text-primary{% endif %}" 
-                                     style="width: 42px; height: 42px; font-weight: 600;">
-                                    {{ membership.user.name[0]|upper }}
-                                </div>
-                                <div>
-                                    <h6 class="mb-0 fw-semibold">{{ membership.user.name }}</h6>
-                                    <small class="text-muted">
-                                        {{ membership.role|capitalize }}
-                                        {% if membership.user.id == current_user.id %}<span class="badge bg-info bg-opacity-10 text-info ms-1">You</span>{% endif %}
-                                    </small>
-                                </div>
-                            </a>
-                            {% if is_admin and membership.user.id != current_user.id %}
-                            <form method="POST" 
-                                  action="{{ url_for('groups.remove_member_route', group_id=group.id, user_id=membership.user.id) }}" 
-                                  onsubmit="return confirm('Remove {{ membership.user.name }} from the group? This action cannot be undone.');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-person-x"></i>
-                                </button>
-                            </form>
-                            {% endif %}
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+                        {% for membership in members %}
+                        <div class="list-group-item border-0 border-bottom py-2 member-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <a href="{{ url_for('groups.view_member', group_id=group.id, user_id=membership.user.id) }}"
+                                   class="d-flex align-items-center text-decoration-none text-dark flex-grow-1 min-width-0">
+                                    <div class="member-avatar {% if membership.role == 'admin' %}admin{% endif %}">
+                                        {{ membership.user.name[0]|upper }}
+                                    </div>
+                                    <div class="ms-2 min-width-0">
+                                        <h6 class="mb-0 fw-semibold small text-truncate-1">{{ membership.user.name }}</h6>
+                                        <small class="text-muted text-truncate-1 d-block">
+                                            {{ membership.role|capitalize }}
+                                            {% if membership.user.id == current_user.id %}
+                                            <span class="badge bg-info ms-1 small">You</span>
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                </a>
+                                {% if is_admin and membership.user.id != current_user.id %}
+                                <form method="POST"
+                                      action="{{ url_for('groups.remove_member_route', group_id=group.id, user_id=membership.user.id) }}"
+                                      onsubmit="return confirm('Remove {{ membership.user.name }} from the group? This action cannot be undone.');"
+                                      class="flex-shrink-0">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1">
+                                        <i class="bi bi-person-x small"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
                         </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -196,48 +428,59 @@
         <!-- Pending Loans Panel -->
         <div class="col-lg-7">
             <div class="card border-0 shadow-sm h-100">
-                <div class="card-header bg-white border-0 py-3 rounded-top-4">
+                <div class="card-header bg-white border-0 py-2">
                     <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 class="mb-0 fw-bold">
-                                <i class="bi bi-clock-fill text-warning me-2"></i>Pending Loans
+                        <div class="min-width-0">
+                            <h5 class="mb-0 fw-bold small text-truncate-1">
+                                <i class="bi bi-clock-fill me-1" style="color: #ffc107;"></i>Pending Loans
                             </h5>
-                            <small class="text-muted">Loan requests awaiting approval</small>
+                            <small class="text-muted text-truncate-1 d-block">Loan requests awaiting approval</small>
                         </div>
-                        <a href="{{ url_for('loans.list_loans', group_id=group.id) }}" class="btn btn-sm btn-outline-primary">
-                            View All <i class="bi bi-arrow-right ms-1"></i>
+                        <a href="{{ url_for('loans.list_loans', group_id=group.id) }}"
+                           class="btn btn-sm btn-outline-primary py-0 px-2 small text-truncate-1 flex-shrink-0">
+                            View All
                         </a>
                     </div>
                 </div>
                 <div class="card-body">
                     {% if pending_loans %}
-                        {% for loan in pending_loans[:5] %}
-                        <div class="card border mb-3 {% if loan.requested_by == current_user.id %}border-info border-2{% else %}border-warning{% endif %}">
-                            <div class="card-body p-3">
+                        {% for loan in pending_loans[:4] %}
+                        <div class="card mb-2 loan-card {% if loan.requested_by == current_user.id %}user-request{% endif %}">
+                            <div class="card-body p-2">
                                 <div class="d-flex justify-content-between align-items-start">
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex align-items-center mb-2">
-                                            <h4 class="fw-bold text-dark mb-0 me-3">₹{{ "{:,.0f}".format(loan.amount) }}</h4>
+                                    <div class="flex-grow-1 min-width-0">
+                                        <div class="d-flex align-items-center mb-1 flex-wrap">
+                                            <h4 class="fw-bold text-dark mb-0 me-2 small text-truncate-1">
+                                                ₹{{ "{:,.0f}".format(loan.amount) }}
+                                            </h4>
                                             {% if loan.requested_by == current_user.id %}
-                                            <span class="badge bg-info">Your Request</span>
+                                            <span class="badge bg-info small text-truncate-1">Your Request</span>
                                             {% endif %}
                                         </div>
-                                        <p class="mb-2">
+                                        <p class="mb-1 small text-truncate-1">
                                             <strong>{{ loan.requester.name }}</strong>
-                                            <small class="text-muted ms-2">{{ loan.created_at.strftime('%d %b %Y') }}</small>
+                                            <small class="text-muted ms-2">
+                                                {{ loan.created_at.strftime('%d %b %Y') }}
+                                            </small>
                                         </p>
-                                        <p class="small text-muted mb-2">{{ loan.reason|truncate(100) }}</p>
-                                        
-                                        <div class="d-flex align-items-center gap-2">
-                                            {% set approval_count = loan.get_approval_count() %}
-                                            {% set pct = (approval_count / loan.required_approvals) * 100 if loan.required_approvals > 0 else 0 %}
-                                            <div class="progress flex-grow-1" style="height: 8px;">
+                                        <p class="small text-muted mb-1 text-truncate-2">
+                                            {{ loan.reason|truncate(80) }}
+                                        </p>
+
+                                        <!-- Approval Progress -->
+                                        {% set approval_count = loan.get_approval_count() %}
+                                        {% set pct = (approval_count / loan.required_approvals) * 100 if loan.required_approvals > 0 else 0 %}
+                                        <div class="d-flex align-items-center gap-1">
+                                            <div class="progress flex-grow-1" style="height: 6px;">
                                                 <div class="progress-bar bg-warning" style="width: {{ pct }}%"></div>
                                             </div>
-                                            <span class="small fw-semibold">{{ approval_count }}/{{ loan.required_approvals }}</span>
+                                            <span class="small fw-semibold text-truncate-1 flex-shrink-0">
+                                                {{ approval_count }}/{{ loan.required_approvals }}
+                                            </span>
                                         </div>
                                     </div>
-                                    <a href="{{ url_for('loans.view_loan', loan_id=loan.id) }}" class="btn btn-warning shadow-sm px-3 ms-3">
+                                    <a href="{{ url_for('loans.view_loan', loan_id=loan.id) }}"
+                                       class="btn btn-warning shadow-sm px-2 ms-2 py-1 small text-truncate-1 flex-shrink-0">
                                         <i class="bi bi-eye me-1"></i> View
                                     </a>
                                 </div>
@@ -245,9 +488,9 @@
                         </div>
                         {% endfor %}
                     {% else %}
-                        <div class="text-center py-5">
-                            <i class="bi bi-inbox text-muted display-4 mb-3"></i>
-                            <h6 class="text-muted fw-semibold">No pending loan requests</h6>
+                        <div class="text-center py-4">
+                            <i class="bi bi-inbox display-6 mb-2" style="color: #adb5bd;"></i>
+                            <h6 class="text-muted fw-semibold small">No pending loan requests</h6>
                             <p class="text-muted small">All loan requests have been processed</p>
                         </div>
                     {% endif %}
@@ -257,18 +500,18 @@
     </div>
 
     <!-- Bottom Navigation -->
-    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-        <a href="{{ url_for('groups.list_groups') }}" class="btn btn-outline-secondary">
+    <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top flex-wrap gap-2">
+        <a href="{{ url_for('groups.list_groups') }}" class="btn btn-outline-secondary btn-sm py-1 px-3 text-truncate-1">
             <i class="bi bi-arrow-left me-1"></i> Back to My Groups
         </a>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
             {% if current_user.id != group.created_by and is_admin %}
-            <span class="badge bg-warning text-dark align-self-center">
+            <span class="badge bg-warning text-dark align-self-center small text-truncate-1">
                 <i class="bi bi-shield-check me-1"></i> Admin (Transferred)
             </span>
             {% endif %}
             <a href="{{ url_for('groups.leave_group_route', group_id=group.id) }}"
-               class="btn btn-outline-danger"
+               class="btn btn-outline-danger btn-sm py-1 px-3 text-truncate-1"
                onclick="return confirm('Are you sure you want to leave {{ group.name }}? You will lose access to all group data.');">
                 <i class="bi bi-box-arrow-left me-1"></i> Leave Group
             </a>
@@ -291,27 +534,4 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-
-<style>
-.rounded-4 {
-    border-radius: 1rem !important;
-}
-
-.bg-opacity-10 {
-    --bs-bg-opacity: 0.1;
-}
-
-.progress {
-    border-radius: 4px;
-}
-
-.progress-bar {
-    border-radius: 4px;
-}
-
-.list-group-item:hover {
-    background-color: rgba(13, 110, 253, 0.05);
-    transition: background-color 0.2s;
-}
-</style>
 {% endblock %}

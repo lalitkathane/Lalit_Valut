@@ -30,6 +30,64 @@ def list_groups():
     return render_template('groups/list.html', groups=my_groups)
 
 
+def validate_group_description(description):
+    """Validate group description length"""
+    if not description or not isinstance(description, str):
+        return False, "Description is required"
+
+    description = description.strip()
+    if len(description) < 10:
+        return False, "Description must be at least 10 characters long"
+    if len(description) > 250:
+        return False, "Description cannot exceed 250 characters"
+
+    return True, ""
+
+
+def validate_group_form_data(name, description, interest_rate, loan_duration, repayment_type):
+    """Validate all group form data with improved checks"""
+    errors = []
+
+    # Name validation
+    name = name.strip()
+    if not name:
+        errors.append("Group name is required")
+    elif len(name) < 3:
+        errors.append("Group name must be at least 3 characters long")
+    elif len(name) > 40:
+        errors.append("Group name cannot exceed 40 characters")
+
+    # Description validation - explicit 10 character check
+    description = description.strip()
+    if not description:
+        errors.append("Description is required")
+    elif len(description) < 10:
+        errors.append("Description must be at least 10 characters long")
+    elif len(description) > 250:
+        errors.append("Description cannot exceed 250 characters")
+
+    # Interest rate validation
+    if not isinstance(interest_rate, (int, float)):
+        errors.append("Interest rate must be a number")
+    elif interest_rate < 0 or interest_rate > 100:
+        errors.append("Interest rate must be between 0 and 100%")
+
+    # Loan duration validation
+    if not isinstance(loan_duration, int):
+        errors.append("Loan duration must be a whole number")
+    elif loan_duration < 1 or loan_duration > 120:
+        errors.append("Loan duration must be between 1 and 120 months")
+
+    # Repayment type validation
+    if repayment_type not in ['emi', 'bullet']:
+        errors.append("Invalid repayment type. Must be 'emi' or 'bullet'")
+
+    if errors:
+        return False, ". ".join(errors)
+
+    return True, ""
+
+
 # ============== CREATE NEW GROUP ==============
 @groups_bp.route('/groups/create', methods=['GET', 'POST'])
 @login_required
@@ -41,12 +99,20 @@ def create_group():
         loan_duration = request.form.get('loan_duration', 12, type=int)
         repayment_type = request.form.get('repayment_type', 'emi')
         use_flat_rate = 'use_flat_rate' in request.form
+        min_emi_duration = request.form.get('min_emi_duration', type=int) or 3
 
-        # Validate group creation data
-        is_valid, error_msg = validate_group_creation_data(name, description, interest_rate, loan_duration, repayment_type)
+        # Validate form data
+        is_valid, error_msg = validate_group_form_data(name, description, interest_rate, loan_duration, repayment_type)
         if not is_valid:
             flash(error_msg, 'danger')
-            return redirect(url_for('groups.create_group'))
+            return render_template('groups/create.html',
+                                   name=name,
+                                   description=description,
+                                   interest_rate=interest_rate,
+                                   loan_duration=loan_duration,
+                                   repayment_type=repayment_type,
+                                   use_flat_rate=use_flat_rate,
+                                   min_emi_duration=min_emi_duration)
 
         try:
             # Create group
@@ -58,7 +124,7 @@ def create_group():
                 default_loan_duration_months=loan_duration,
                 default_repayment_type=repayment_type,
                 use_flat_rate=use_flat_rate,
-                min_emi_duration_months=request.form.get('min_emi_duration', type=int)
+                min_emi_duration_months=min_emi_duration
             )
             db.session.add(new_group)
             db.session.flush()
@@ -76,7 +142,6 @@ def create_group():
             db.session.commit()
 
             flash(f'Group "{name}" created successfully!', 'success')
-            # REDIRECT TO ADD MEMBER PAGE INSTEAD OF VIEW GROUP
             return redirect(url_for('groups.add_member_route', group_id=new_group.id))
 
         except Exception as e:
@@ -84,6 +149,58 @@ def create_group():
             flash(f'Error creating group: {str(e)}', 'danger')
 
     return render_template('groups/create.html')
+
+
+# ============== GROUP SETTINGS (Admin) ==============
+@groups_bp.route('/groups/<int:group_id>/settings', methods=['GET', 'POST'])
+@login_required
+def group_settings(group_id):
+    group = get_group_or_404(group_id)
+
+    # Check admin status
+    is_admin, error_msg = require_group_admin(current_user.id, group_id)
+    if not is_admin:
+        flash(error_msg, 'danger')
+        return redirect(url_for('groups.view_group', group_id=group_id))
+
+    if request.method == 'POST':
+        name = request.form.get('name', group.name).strip()
+        description = request.form.get('description', group.description).strip()
+        interest_rate = request.form.get('interest_rate', group.default_interest_rate, type=float)
+        loan_duration = request.form.get('loan_duration', group.default_loan_duration_months, type=int)
+        repayment_type = request.form.get('repayment_type', group.default_repayment_type)
+        use_flat_rate = 'use_flat_rate' in request.form
+        min_emi_duration = request.form.get('min_emi_duration', type=int) or group.min_emi_duration_months or 3
+
+        # Validate form data
+        is_valid, error_msg = validate_group_form_data(name, description, interest_rate, loan_duration, repayment_type)
+        if not is_valid:
+            flash(error_msg, 'danger')
+            return redirect(url_for('groups.group_settings', group_id=group_id))
+
+        # Update group
+        group.name = name
+        group.description = description
+        group.default_interest_rate = interest_rate
+        group.default_loan_duration_months = loan_duration
+        group.default_repayment_type = repayment_type
+        group.use_flat_rate = use_flat_rate
+        group.min_emi_duration_months = min_emi_duration
+
+        db.session.commit()
+        flash('Settings updated!', 'success')
+        return redirect(url_for('groups.view_group', group_id=group_id))
+
+    # Fetch data needed for the Delete Group logic in settings.html
+    members = get_active_members(group_id)
+
+    return render_template(
+        'groups/settings.html',
+        group=group,
+        is_admin=is_admin,
+        members=members,
+        wallet=group.wallet
+    )
 
 
 # ============== VIEW SINGLE GROUP ==============
@@ -124,45 +241,6 @@ def view_group(group_id):
         active_members_count=active_members_count
     )
 
-
-# ============== GROUP SETTINGS (Admin) ==============
-@groups_bp.route('/groups/<int:group_id>/settings', methods=['GET', 'POST'])
-@login_required
-def group_settings(group_id):
-    group = get_group_or_404(group_id)
-
-    # Check admin status
-    is_admin, error_msg = require_group_admin(current_user.id, group_id)
-    if not is_admin:
-        flash(error_msg, 'danger')
-        return redirect(url_for('groups.view_group', group_id=group_id))
-
-    if request.method == 'POST':
-        group.name = request.form.get('name', group.name).strip()
-        group.description = request.form.get('description', group.description).strip()
-        group.default_interest_rate = request.form.get('interest_rate', group.default_interest_rate, type=float)
-        group.default_loan_duration_months = request.form.get('loan_duration', group.default_loan_duration_months,
-                                                              type=int)
-        group.default_repayment_type = request.form.get('repayment_type', group.default_repayment_type)
-        group.use_flat_rate = 'use_flat_rate' in request.form
-
-        # Save the new EMI duration field
-        group.min_emi_duration_months = request.form.get('min_emi_duration', type=int)
-
-        db.session.commit()
-        flash('Settings updated!', 'success')
-        return redirect(url_for('groups.view_group', group_id=group_id))
-
-    # Fetch data needed for the Delete Group logic in settings.html
-    members = get_active_members(group_id)
-
-    return render_template(
-        'groups/settings.html',
-        group=group,
-        is_admin=is_admin,
-        members=members,  # Required for members|length check
-        wallet=group.wallet  # Required for wallet.balance check
-    )
 
 
 # ============== ADD MEMBER ==============

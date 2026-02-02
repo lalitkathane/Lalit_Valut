@@ -44,12 +44,12 @@
                         <div class="col-md-6">
                             <small class="text-muted">Type</small>
                             <h6>
-                                    {% if withdrawal.interest_amount == 0 %}
-                                    <span class="badge bg-info">Principal Only</span>
-                                    {% else %}
-                                    <span class="badge bg-warning">With Interest</span>
-                                    {% endif %}
-                                </h6>
+                                {% if withdrawal.interest_amount == 0 %}
+                                <span class="badge bg-info">Principal Only</span>
+                                {% else %}
+                                <span class="badge bg-warning">With Interest</span>
+                                {% endif %}
+                            </h6>
                         </div>
                     </div>
 

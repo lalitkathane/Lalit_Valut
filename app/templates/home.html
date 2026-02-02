@@ -1,52 +1,110 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Welcome - Bachat Gat{% endblock %}
+{% block title %}SaveGroup | Digital Group Savings & Loans{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-md-8 text-center">
-        <h1 class="display-4 mb-4">
-            <i class="bi bi-piggy-bank text-primary"></i>
-        </h1>
-        <h1 class="display-5">Welcome to Bachat Gat</h1>
-        <p class="lead text-muted">
-            A simple group savings and loan approval system.
-            Create groups, request loans, and get approvals from your trusted circle.
-        </p>
-
-        <div class="mt-4">
-            <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg me-2">
-                <i class="bi bi-person-plus"></i> Get Started
-            </a>
-            <a href="{{ url_for('auth.login') }}" class="btn btn-outline-primary btn-lg">
-                <i class="bi bi-box-arrow-in-right"></i> Login
-            </a>
-        </div>
-
-        <!-- Features -->
-        <div class="row mt-5">
-            <div class="col-md-4">
-                <div class="card p-4">
-                    <i class="bi bi-people text-primary" style="font-size: 2rem;"></i>
-                    <h5 class="mt-3">Create Groups</h5>
-                    <p class="text-muted">Form trusted savings groups with friends & family</p>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1>Digitize Your Informal <br> Group Finance</h1>
+                    <p>A secure platform for group contributions, automated loans, and fair interest distribution.</p>
+                    <div class="hero-btns">
+                        <a href="{{ url_for('auth.register') }}" class="btn-primary main-cta">Start Your Group</a>
+                        <a href="#how-it-works" class="btn-outline">Watch Demo</a>
+                    </div>
                 </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card p-4">
-                    <i class="bi bi-cash-coin text-success" style="font-size: 2rem;"></i>
-                    <h5 class="mt-3">Request Loans</h5>
-                    <p class="text-muted">Submit loan requests to your group members</p>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card p-4">
-                    <i class="bi bi-check-circle text-info" style="font-size: 2rem;"></i>
-                    <h5 class="mt-3">Vote & Approve</h5>
-                    <p class="text-muted">Democratic approval through member voting</p>
+                <div class="hero-image">
+                    <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80"
+                         alt="SaveGroup Dashboard Interface">
                 </div>
             </div>
         </div>
-    </div>
-</div>
+    </section>
+
+           <!-- Features Section -->
+        <section id="features" class="features">
+            <div class="container">
+                <h2 class="section-title">Why Choose SaveGroup?</h2>
+                <p class="section-subtitle">
+                    We combine traditional savings group principles with modern financial technology to create a seamless digital experience.
+                </p>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <div class="icon">💼</div>
+                        <h3>Shared Wallet</h3>
+                        <p>Centralized pool for all member contributions with real-time balance tracking and automated reporting.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">📊</div>
+                        <h3>Automated Loans</h3>
+                        <p>Rule-based loan approvals and automated EMI calculations with flexible repayment schedules.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">📈</div>
+                        <h3>Fair Interest</h3>
+                        <p>Smart interest distribution based on individual contribution amount, duration, and group voting.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">⚖️</div>
+                        <h3>Governance</h3>
+                        <p>Automated rules for member entry, exit, and financial voting for 100% transparency.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">🔒</div>
+                        <h3>Bank-Level Security</h3>
+                        <p>Military-grade encryption, 2FA authentication, and regular security audits to protect your funds.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">📱</div>
+                        <h3>Mobile Friendly</h3>
+                        <p>Access your group from any device with our responsive web app. Mobile app coming soon!</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How it Works -->
+        <section id="how-it-works" class="how-it-works">
+            <div class="container">
+                <h2 class="section-title">How it Works in 3 Simple Steps</h2>
+                <p class="section-subtitle">
+                    Get your digital savings group up and running in minutes, not days.
+                </p>
+                <div class="steps-container">
+                    <div class="steps">
+                        <div class="step">
+                            <span>1</span>
+                            <h4>Create & Customize</h4>
+                            <p>Set up your group name, contribution rules, loan terms, and invite members via email or link.</p>
+                        </div>
+                        <div class="step">
+                            <span>2</span>
+                            <h4>Pool & Grow</h4>
+                            <p>Members contribute securely via multiple payment options. Watch your collective savings grow.</p>
+                        </div>
+                        <div class="step">
+                            <span>3</span>
+                            <h4>Borrow & Benefit</h4>
+                            <p>Members can apply for loans, receive instant approvals based on group rules, and repay easily.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Security Section -->
+        <section id="security" class="cta-banner">
+            <div class="container">
+                <h2>Secure. Transparent. Trusted.</h2>
+                <p>Every transaction is encrypted, logged, and auditable. Say goodbye to manual ledger errors and hello to digital peace of mind.</p>
+                <div class="security-tags">
+                    <span class="security-tag">🔒 Bank-Level Security</span>
+                    <span class="security-tag">📊 Real-Time Analytics</span>
+                    <span class="security-tag">👥 24/7 Support</span>
+                </div>
+                <a href="{{ url_for('auth.register') }}" class="btn-white">Create Your Account Today</a>
+            </div>
+        </section>
 {% endblock %}

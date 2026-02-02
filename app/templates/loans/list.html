@@ -3,117 +3,132 @@
 {% block title %}Loans - {{ group.name }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2><i class="bi bi-cash-coin"></i> Loan Requests</h2>
-        <p class="text-muted mb-0">{{ group.name }}</p>
-    </div>
-    <a href="{{ url_for('loans.create_loan', group_id=group.id) }}" class="btn btn-warning">
-        <i class="bi bi-plus-lg"></i> Request Loan
-    </a>
-</div>
-
-<!-- Status Filter -->
-<div class="mb-4">
-    <div class="btn-group" role="group">
-        <a href="{{ url_for('loans.list_loans', group_id=group.id) }}"
-           class="btn btn-outline-secondary {% if not status_filter %}active{% endif %}">
-            All
-        </a>
-        <a href="{{ url_for('loans.list_loans', group_id=group.id, status='pending') }}"
-           class="btn btn-outline-warning {% if status_filter == 'pending' %}active{% endif %}">
-            Pending
-        </a>
-        <a href="{{ url_for('loans.list_loans', group_id=group.id, status='pre_approved') }}"
-           class="btn btn-outline-info {% if status_filter == 'pre_approved' %}active{% endif %}">
-            Pre-Approved
-        </a>
-        <a href="{{ url_for('loans.list_loans', group_id=group.id, status='approved') }}"
-           class="btn btn-outline-success {% if status_filter == 'approved' %}active{% endif %}">
-            Approved
-        </a>
-        <a href="{{ url_for('loans.list_loans', group_id=group.id, status='disbursed') }}"
-           class="btn btn-outline-primary {% if status_filter == 'disbursed' %}active{% endif %}">
-            Disbursed
-        </a>
-        <a href="{{ url_for('loans.list_loans', group_id=group.id, status='completed') }}"
-           class="btn btn-outline-dark {% if status_filter == 'completed' %}active{% endif %}">
-            Completed
-        </a>
-        <a href="{{ url_for('loans.list_loans', group_id=group.id, status='rejected') }}"
-           class="btn btn-outline-danger {% if status_filter == 'rejected' %}active{% endif %}">
-            Rejected
+<div class="container py-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-cash-coin"></i> Loan Requests</h2>
+            <p class="text-muted mb-0">{{ group.name }}</p>
+        </div>
+        <a href="{{ url_for('loans.create_loan', group_id=group.id) }}" class="btn btn-warning">
+            <i class="bi bi-plus-lg"></i> Request Loan
         </a>
     </div>
-</div>
 
-{% if loans %}
-<div class="table-responsive">
-    <table class="table table-hover align-middle">
-        <thead class="table-light">
-            <tr>
-                <th>Requested By</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Date</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for loan in loans %}
-            <tr>
-                <td>
-                    {{ loan.requester.name }}
-                    {% if loan.requester.id == current_user.id %}
-                    <span class="badge bg-info ms-1">You</span>
-                    {% endif %}
-                </td>
-                <td><strong>₹{{ "{:,.0f}".format(loan.amount) }}</strong></td>
-                <td>
-                    <span class="badge
-                        {% if loan.status == 'pending' %}bg-warning text-dark
-                        {% elif loan.status == 'pre_approved' %}bg-info
-                        {% elif loan.status == 'approved' %}bg-success
-                        {% elif loan.status == 'rejected' %}bg-danger
-                        {% elif loan.status == 'disbursed' %}bg-primary
-                        {% elif loan.status == 'completed' %}bg-dark
-                        {% else %}bg-secondary
-                        {% endif %}">
-                        {{ loan.status|replace('_', ' ')|title }}
-                    </span>
-                </td>
-                <td>{{ loan.created_at.strftime('%d %b %Y') }}</td>
-                <td>
-                    <a href="{{ url_for('loans.view_loan', loan_id=loan.id) }}"
-                       class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-eye"></i> View
-                    </a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% else %}
-<div class="text-center py-5">
-    <i class="bi bi-cash-coin text-muted" style="font-size: 4rem;"></i>
-    <h4 class="mt-3 text-muted">
-        {% if status_filter %}
-            No {{ status_filter|replace('_', ' ')|title }} loans
-        {% else %}
-            No loan requests yet
-        {% endif %}
-    </h4>
-    <p class="text-muted">Be the first to request a loan!</p>
-    <a href="{{ url_for('loans.create_loan', group_id=group.id) }}" class="btn btn-warning btn-lg">
-        <i class="bi bi-plus-lg"></i> Request Loan
-    </a>
-</div>
-{% endif %}
+    <!-- Status Filter -->
+    <div class="mb-4">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('loans.list_loans', group_id=group.id) }}"
+               class="btn btn-outline-secondary {% if not status_filter %}active{% endif %}">
+                All
+            </a>
+            <a href="{{ url_for('loans.list_loans', group_id=group.id, status='pending') }}"
+               class="btn btn-outline-warning {% if status_filter == 'pending' %}active{% endif %}">
+                Pending
+            </a>
+            <a href="{{ url_for('loans.list_loans', group_id=group.id, status='pre_approved') }}"
+               class="btn btn-outline-info {% if status_filter == 'pre_approved' %}active{% endif %}">
+                Pre-Approved
+            </a>
+            <a href="{{ url_for('loans.list_loans', group_id=group.id, status='approved') }}"
+               class="btn btn-outline-success {% if status_filter == 'approved' %}active{% endif %}">
+                Approved
+            </a>
+            <a href="{{ url_for('loans.list_loans', group_id=group.id, status='disbursed') }}"
+               class="btn btn-outline-primary {% if status_filter == 'disbursed' %}active{% endif %}">
+                Disbursed
+            </a>
+            <a href="{{ url_for('loans.list_loans', group_id=group.id, status='completed') }}"
+               class="btn btn-outline-dark {% if status_filter == 'completed' %}active{% endif %}">
+                Completed
+            </a>
+            <a href="{{ url_for('loans.list_loans', group_id=group.id, status='rejected') }}"
+               class="btn btn-outline-danger {% if status_filter == 'rejected' %}active{% endif %}">
+                Rejected
+            </a>
+        </div>
+    </div>
 
-<div class="mt-4">
-    <a href="{{ url_for('groups.view_group', group_id=group.id) }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Back to Group
-    </a>
+    {% if loans %}
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Requested By</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for loan in loans %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="flex-shrink-0 me-2">
+                                        <i class="bi bi-person-circle text-secondary"></i>
+                                    </div>
+                                    <div>
+                                        {{ loan.requester.name }}
+                                        {% if loan.requester.id == current_user.id %}
+                                        <span class="badge bg-info ms-1">You</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td><strong>₹{{ "{:,.0f}".format(loan.amount) }}</strong></td>
+                            <td>
+                                <span class="badge
+                                    {% if loan.status == 'pending' %}bg-warning text-dark
+                                    {% elif loan.status == 'pre_approved' %}bg-info
+                                    {% elif loan.status == 'approved' %}bg-success
+                                    {% elif loan.status == 'rejected' %}bg-danger
+                                    {% elif loan.status == 'disbursed' %}bg-primary
+                                    {% elif loan.status == 'completed' %}bg-dark
+                                    {% else %}bg-secondary
+                                    {% endif %} p-2">
+                                    {{ loan.status|replace('_', ' ')|title }}
+                                </span>
+                            </td>
+                            <td>{{ loan.created_at.strftime('%d %b %Y') }}</td>
+                            <td>
+                                <a href="{{ url_for('loans.view_loan', loan_id=loan.id) }}"
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye"></i> View
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-cash-coin text-muted" style="font-size: 4rem;"></i>
+            <h4 class="mt-3 text-muted">
+                {% if status_filter %}
+                    No {{ status_filter|replace('_', ' ')|title }} loans
+                {% else %}
+                    No loan requests yet
+                {% endif %}
+            </h4>
+            <p class="text-muted">Be the first to request a loan!</p>
+            <a href="{{ url_for('loans.create_loan', group_id=group.id) }}" class="btn btn-warning btn-lg mt-3">
+                <i class="bi bi-plus-lg"></i> Request Loan
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mt-4">
+        <a href="{{ url_for('groups.view_group', group_id=group.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Group
+        </a>
+    </div>
 </div>
 {% endblock %}

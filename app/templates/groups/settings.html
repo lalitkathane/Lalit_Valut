@@ -22,7 +22,7 @@
 
                 <div class="card-body p-4">
                     <form id="groupForm" action="{{ url_for('groups.group_settings', group_id=group.id) }}"
-                          method="POST">
+                          method="POST" novalidate>
                         {% include 'groups/_form.html' %}
 
                         <!-- Loan Policy Extensions -->
@@ -38,8 +38,7 @@
                                            value="{{ group.min_emi_duration_months if group.min_emi_duration_months is not none else 3 }}"
                                            min="1" max="60" step="1">
                                     <div class="form-text">
-                                        Minimum repayment period for EMI-based loans. Shorter durations increase monthly
-                                        payments.
+                                        Minimum repayment period for EMI-based loans. Shorter durations increase monthly payments.
                                     </div>
                                 </div>
 
@@ -50,12 +49,8 @@
                                             <li>Interest Rate: {{ "%.1f"|format(group.default_interest_rate) }}%</li>
                                             <li>Max Duration: {{ group.default_loan_duration_months }} months</li>
                                             <li>Repayment: {{ group.default_repayment_type|upper }}</li>
-                                            <li>Interest Type: {{ 'Flat Rate' if group.use_flat_rate else 'Reducing
-                                                Balance' }}
-                                            </li>
-                                            <li>Min EMI Duration: {{ group.min_emi_duration_months if
-                                                group.min_emi_duration_months is not none else 3 }} months
-                                            </li>
+                                            <li>Interest Type: {{ 'Flat Rate' if group.use_flat_rate else 'Reducing Balance' }}</li>
+                                            <li>Min EMI Duration: {{ group.min_emi_duration_months if group.min_emi_duration_months is not none else 3 }} months</li>
                                         </ul>
                                     </div>
                                 </div>
@@ -68,7 +63,7 @@
                                class="btn btn-outline-secondary px-4">
                                 <i class="bi bi-x-circle me-1"></i> Cancel
                             </a>
-                            <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm">
+                            <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm" id="saveSettingsBtn">
                                 <i class="bi bi-check-lg me-1"></i> Save Changes
                             </button>
                         </div>
@@ -131,8 +126,7 @@
                                 {% endif %}
 
                                 <!-- Check active loans -->
-                                {% set active_loans = group.loan_requests.filter_by(is_active=True,
-                                status='disbursed').count() %}
+                                {% set active_loans = group.loan_requests.filter_by(is_active=True, status='disbursed').count() %}
                                 {% if active_loans > 0 %}
                                 <li class="text-danger fw-bold">
                                     <i class="bi bi-x-circle me-1"></i>
@@ -170,8 +164,7 @@
                                 <button type="submit"
                                         id="deleteButton"
                                         class="btn btn-danger w-100"
-                                        {% if total_members> 1 or current_balance > 0 or active_loans > 0 %}disabled{%
-                                    endif %}>
+                                        {% if total_members> 1 or current_balance > 0 or active_loans > 0 %}disabled{% endif %}>
                                     <i class="bi bi-trash3 me-2"></i> Permanently Delete "{{ group.name }}"
                                 </button>
                             </form>
@@ -206,19 +199,6 @@
 <style>
     .rounded-4 {
         border-radius: 1rem !important;
-    }
-    
-    .bg-opacity-10 {
-        --bs-bg-opacity: 0.1;
-    }
-    
-    .form-control:focus {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-    }
-    
-    .border-2 {
-        border-width: 2px !important;
     }
 </style>
 

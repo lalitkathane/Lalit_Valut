@@ -1,66 +1,153 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Register - Bachat Gat{% endblock %}
+{% block title %}Register - SaveGroup{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-5">
-        <div class="card">
-            <div class="card-body p-5">
-                <h3 class="text-center mb-4">
-                    <i class="bi bi-person-plus text-primary"></i> Create Account
-                </h3>
+<div class="auth-page">
+    <div class="container">
+        <div class="auth-wrapper">
+            <!-- Left Column: Branding & Benefits -->
+            <div class="auth-left">
+                <div class="auth-image">
+                    <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+                         alt="Digital savings group illustration"
+                         loading="lazy">
+                    <div class="auth-image-content">
+                        <h2>Join Our Community</h2>
+                        <p>Start your digital savings journey with transparency, security, and ease.</p>
 
-                <form method="POST" action="{{ url_for('auth.register') }}">
-                    <div class="mb-3">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" name="name" class="form-control"
-                               placeholder="Enter your name" required>
+                        <div class="auth-benefits">
+                            <div class="auth-benefit-item">
+                                <div class="auth-benefit-icon">
+                                    <i class="bi bi-shield-check"></i>
+                                </div>
+                                <div class="auth-benefit-text">
+                                    <h4>Bank-Level Security</h4>
+                                    <p>Your data is encrypted and protected</p>
+                                </div>
+                            </div>
+                            <div class="auth-benefit-item">
+                                <div class="auth-benefit-icon">
+                                    <i class="bi bi-graph-up"></i>
+                                </div>
+                                <div class="auth-benefit-text">
+                                    <h4>Grow Together</h4>
+                                    <p>Collective savings with fair interest distribution</p>
+                                </div>
+                            </div>
+                            <div class="auth-benefit-item">
+                                <div class="auth-benefit-icon">
+                                    <i class="bi bi-people"></i>
+                                </div>
+                                <div class="auth-benefit-text">
+                                    <h4>Community First</h4>
+                                    <p>Join thousands of successful savings groups</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                </div>
+            </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Email Address</label>
-                        <input type="email" name="email" class="form-control"
-                               placeholder="Enter your email" required>
-                    </div>
+            <!-- Right Column: Registration Form -->
+            <div class="auth-right">
+                <div class="auth-form-header">
+                    <h1>Create Account</h1>
+                    <p>Get started in just a few minutes</p>
+                </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Mobile Number</label>
-                        <input type="tel" name="phone" class="form-control"
-                               placeholder="Enter 10-digit mobile number"
-                               pattern="[6-9][0-9]{9}"
-                               title="Enter a valid 10-digit Indian mobile number"
-                               required>
-                        <small class="text-muted">Enter without country code (e.g., 9876543210)</small>
-                    </div>
+                <div class="auth-form-container">
+                    <form method="POST" action="{{ url_for('auth.register') }}" class="registration-form" id="registerForm">
+                        <div class="auth-form-group">
+                            <label for="name" class="auth-form-label">Full Name</label>
+                            <input type="text" id="name" name="name" class="auth-form-control" required
+                                   placeholder="Enter your full name">
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-control"
-                               placeholder="Create password (min 6 chars)"
-                               minlength="6"
-                               required>
-                    </div>
+                        <div class="auth-form-group">
+                            <label for="email" class="auth-form-label">Email Address</label>
+                            <input type="email" id="email" name="email" class="auth-form-control" required
+                                   placeholder="you@example.com">
+                        </div>
 
-                    <div class="mb-4">
-                        <label class="form-label">Confirm Password</label>
-                        <input type="password" name="confirm_password" class="form-control"
-                               placeholder="Confirm your password"
-                               minlength="6"
-                               required>
-                    </div>
+                        <div class="auth-form-group">
+                            <label for="phone" class="auth-form-label">Phone Number</label>
+                            <input type="tel" id="phone" name="phone" class="auth-form-control" required
+                                   placeholder="+91 9876543210">
+                        </div>
 
-                    <button type="submit" class="btn btn-primary w-100 mb-3">
-                        <i class="bi bi-check-lg"></i> Register
-                    </button>
-                </form>
+                        <div class="auth-form-group">
+                            <label for="password" class="auth-form-label">Password</label>
+                            <input type="password" id="password" name="password" class="auth-form-control" required
+                                   placeholder="Create a strong password">
+                            <div class="auth-password-hint">
+                                <i class="bi bi-info-circle"></i>
+                                At least 8 characters with letters and numbers
+                            </div>
+                        </div>
 
-                <p class="text-center text-muted mb-0">
-                    Already have an account?
-                    <a href="{{ url_for('auth.login') }}">Login here</a>
-                </p>
+                        <div class="auth-form-group">
+                            <label for="confirm_password" class="auth-form-label">Confirm Password</label>
+                            <input type="password" id="confirm_password" name="confirm_password" class="auth-form-control" required
+                                   placeholder="Re-enter your password">
+                        </div>
+
+                        <div class="auth-terms-agreement">
+                            <input type="checkbox" id="terms" name="terms" required>
+                            <label for="terms">
+                                I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
+                            </label>
+                        </div>
+
+                        <button type="submit" class="auth-btn-primary" id="submitBtn">
+                            <span class="btn-text">Create Account</span>
+                            <span class="btn-loader" style="display: none;">
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                Creating account...
+                            </span>
+                        </button>
+
+                        <div class="auth-divider">
+                            <span>or sign up with</span>
+                        </div>
+
+                        <div class="auth-social-login">
+                            <button type="button" class="auth-btn-social" data-provider="google">
+                                <i class="bi bi-google"></i>
+                                <span>Google</span>
+                            </button>
+                            <button type="button" class="auth-btn-social" data-provider="facebook">
+                                <i class="bi bi-facebook"></i>
+                                <span>Facebook</span>
+                            </button>
+                        </div>
+
+                        <div class="auth-footer">
+                            <p>Already have an account? <a href="{{ url_for('auth.login') }}">Sign In</a></p>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+<script>
+    // Register-specific validation (if any)
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('registerForm');
+
+        if (form) {
+            // All validation is server-side via helperfunctions.py
+            // This just ensures the form submits properly
+        }
+    });
+</script>
 {% endblock %}

@@ -13,7 +13,7 @@
                     </h4>
                 </div>
                 <div class="card-body p-4 p-lg-5">
-                    <form method="POST" action="{{ url_for('groups.create_group') }}">
+                    <form method="POST" action="{{ url_for('groups.create_group') }}" id="groupForm" novalidate>
                         {% include 'groups/_form.html' %}
 
                         <!-- Additional Fields -->
@@ -32,7 +32,7 @@
                             <a href="{{ url_for('groups.list_groups') }}" class="btn btn-outline-secondary px-4 rounded-3">
                                 <i class="bi bi-x-circle me-1"></i> Cancel
                             </a>
-                            <button type="submit" class="btn btn-primary px-5 rounded-3">
+                            <button type="submit" class="btn btn-primary px-5 rounded-3" id="submitBtn">
                                 <i class="bi bi-check-circle me-1"></i> Create Group
                             </button>
                         </div>
@@ -51,6 +51,7 @@
                             <li>Set appropriate interest rates based on your group's policy</li>
                             <li>Consider using "Flat Rate" for simpler calculations or "Reducing Balance" for fairness</li>
                             <li>Add members immediately after creation to start contributions</li>
+                            <li><strong>Group description must be at least 10 characters long</strong> to provide clear information to members</li>
                         </ul>
                     </div>
                 </div>
@@ -59,106 +60,39 @@
     </div>
 </div>
 
-<!-- Custom Styles -->
 <style>
     .rounded-4 {
         border-radius: 1rem !important;
     }
-    
-    .form-control, .form-select, .btn {
-        border-radius: 0.5rem !important;
-    }
-    
-    .form-control:focus, .form-select:focus {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-    }
-    
-    .transition-hover {
-        transition: all 0.2s ease-in-out;
-    }
-    
-    .transition-hover:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    }
-    
-    /* Toggle icon animation */
-    [aria-expanded="true"] .toggle-icon {
-        transform: rotate(180deg);
-    }
-    
-    .toggle-icon {
-        transition: transform 0.3s ease;
-    }
 </style>
-
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/group_validation.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Character counters
-    const nameInput = document.getElementById('nameInput');
-    const descInput = document.getElementById('descInput');
-    const nameCount = document.getElementById('nameCount');
-    const descCount = document.getElementById('descCount');
+    const form = document.getElementById('groupForm');
 
-    if (nameInput && nameCount) {
-        nameInput.addEventListener('input', () => {
-            nameCount.textContent = `${nameInput.value.length}/40`;
-            nameCount.classList.toggle('text-danger', nameInput.value.length >= 40);
-        });
-        nameCount.textContent = `${nameInput.value.length}/40`;
-    }
+    // Add form submission validation
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const descriptionField = document.querySelector('textarea[name="description"]');
+            if (descriptionField) {
+                const result = GroupFormValidator.validateDescription(descriptionField.value);
+                if (!result.valid) {
+                    e.preventDefault();
+                    e.stopPropagation();
 
-    if (descInput && descCount) {
-        descInput.addEventListener('input', () => {
-            descCount.textContent = `${descInput.value.length}/250`;
-            descCount.classList.toggle('text-danger', descInput.value.length >= 250);
-        });
-        descCount.textContent = `${descInput.value.length}/250`;
-    }
+                    descriptionField.focus();
+                    descriptionField.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
 
-    // Loan preview calculator
-    const previewText = document.getElementById('loanPreview');
-    
-    if (previewText) {
-        function updatePreview() {
-            const principal = 10000;
-            const rate = parseFloat(document.querySelector('[name="interest_rate"]').value) || 12;
-            const months = parseInt(document.querySelector('[name="loan_duration"]').value) || 12;
-            const isBullet = document.querySelector('[name="repayment_type"]').value === 'bullet';
-            const isFlat = document.querySelector('[name="use_flat_rate"]').checked;
-            
-            let total, monthly;
-            
-            if (isBullet) {
-                total = principal + (principal * (rate / 100) * (months / 12));
-                previewText.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-calculator me-2"></i><span>₹${principal.toLocaleString()} loan → ₹${Math.round(total).toLocaleString()} repaid at end</span></div>`;
-            } else if (isFlat) {
-                total = principal + (principal * (rate / 100) * (months / 12));
-                monthly = total / months;
-                previewText.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-calculator me-2"></i><span>₹${principal.toLocaleString()} loan → ₹${Math.round(monthly).toLocaleString()}/month (Total: ₹${Math.round(total).toLocaleString()})</span></div>`;
-            } else {
-                const monthlyRate = rate / 100 / 12;
-                monthly = (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
-                total = monthly * months;
-                previewText.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-calculator me-2"></i><span>₹${principal.toLocaleString()} loan → ₹${Math.round(monthly).toLocaleString()}/month (Total: ₹${Math.round(total).toLocaleString()})</span></div>`;
-            }
-        }
-
-        // Update preview when any setting changes
-        ['interest_rate', 'loan_duration', 'repayment_type', 'use_flat_rate'].forEach(name => {
-            const element = document.querySelector(`[name="${name}"]`);
-            if (element) {
-                element.addEventListener('change', updatePreview);
-                element.addEventListener('input', updatePreview);
+                    alert(result.message);
+                }
             }
         });
-
-        // Initial calculation
-        updatePreview();
     }
 });
 </script>

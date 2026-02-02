@@ -1,252 +1,445 @@
 {% extends 'base.html' %}
 
-{% block title %}Dashboard - Bachat Gat{% endblock %}
+{% block title %}Dashboard - SaveGroup{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Dashboard-specific styling */
+    .dashboard-stats .card {
+        border-radius: 12px;
+        border: 1px solid #eee;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+        min-height: 120px;
+    }
+
+    .dashboard-stats .card:hover {
+        box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    }
+
+    .dashboard-stats .card-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* Custom button styling */
+    .btn-custom-success {
+        background-color: var(--primary-color) !important;
+        border-color: var(--primary-color) !important;
+        color: white !important;
+    }
+
+    .btn-custom-success:hover {
+        background-color: #00a884 !important;
+        border-color: #00a884 !important;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 184, 148, 0.3);
+    }
+
+    /* Custom alert styling */
+    .alert-custom {
+        border-radius: 8px;
+        border: none;
+        border-left: 4px solid;
+        animation: slideIn 0.3s ease;
+    }
+
+    .alert-custom-warning {
+        background-color: rgba(255, 193, 7, 0.1) !important;
+        color: #856404;
+        border-left-color: #ffc107;
+    }
+
+    .alert-custom-info {
+        background-color: rgba(23, 162, 184, 0.1) !important;
+        color: #0c5460;
+        border-left-color: #17a2b8;
+    }
+
+    .alert-custom-primary {
+        background-color: rgba(0, 123, 255, 0.1) !important;
+        color: #004085;
+        border-left-color: #007bff;
+    }
+
+    /* Group cards styling */
+    .group-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+        flex-shrink: 0;
+    }
+
+    /* Activity icons */
+    .activity-icon {
+        font-size: 1.2rem;
+        margin-top: 3px;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Progress bar */
+    .progress-thin {
+        height: 5px;
+    }
+
+    /* Card hover effects */
+    .card-hover {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1) !important;
+    }
+
+    /* Add to dashboard.html extra_css section */
+    .group-name-truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 180px; /* Adjust as needed */
+    }
+
+    /* For smaller screens */
+    @media (max-width: 768px) {
+        .group-name-truncate {
+            max-width: 250px;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
+<!-- Dashboard Content -->
+<div class="container py-4">
 
-<!-- Welcome Section -->
-<div class="row mb-3">
-    <div class="col-12 d-flex justify-content-between align-items-center">
-        <div>
-            <h4 class="mb-0">Welcome, {{ current_user.name }}! 👋</h4>
-            <small class="text-muted">
-                <i class="bi bi-shield-check text-success"></i>
+    <!-- Welcome Section -->
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-6 col-12 mb-3 mb-md-0">
+            <h2 class="fw-bold mb-1" style="color: var(--secondary-color);">
+                Welcome, {{ current_user.name }}! 👋
+            </h2>
+            <p class="text-muted mb-0">
+                <i class="bi bi-shield-check me-1" style="color: var(--primary-color);"></i>
                 Your personal financial summary
                 {% if current_user.phone %}
-                | <i class="bi bi-phone"></i> {{ current_user.phone }}
+                <span class="ms-2">
+                    <i class="bi bi-phone me-1"></i>{{ current_user.phone }}
+                </span>
                 {% endif %}
-            </small>
+            </p>
         </div>
-        <a href="{{ url_for('groups.create_group') }}" class="btn btn-success">
-            <i class="bi bi-plus-circle"></i> New Group
-        </a>
+        <div class="col-md-6 col-12 text-md-end">
+            <a href="{{ url_for('groups.create_group') }}" class="btn btn-custom-success fw-medium">
+                <i class="bi bi-plus-circle me-2"></i>Create New Group
+            </a>
+        </div>
     </div>
-</div>
 
-<!-- Alerts -->
-{% if pending_votes > 0 or pending_repayment_approvals > 0 or pending_withdrawal_approvals > 0 %}
-<div class="row mb-3">
-    <div class="col-12">
-        {% if pending_votes > 0 %}
-        <div class="alert alert-warning d-flex justify-content-between align-items-center py-2 mb-2">
-            <span><i class="bi bi-exclamation-triangle"></i> {{ pending_votes }} loan request(s) need your vote</span>
-            {% if pending_loan_for_vote %}
-            <a href="{{ url_for('loans.view_loan', loan_id=pending_loan_for_vote.id) }}" class="btn btn-sm btn-warning">Vote Now</a>
-            {% else %}
-            <a href="{{ url_for('loans.my_loans') }}" class="btn btn-sm btn-warning">Vote Now</a>
-            {% endif %}
-        </div>
-        {% endif %}
-
-        {% if pending_repayment_approvals > 0 %}
-        <div class="alert alert-info d-flex justify-content-between align-items-center py-2 mb-2">
-            <span><i class="bi bi-clock-history"></i> {{ pending_repayment_approvals }} repayment(s) awaiting approval</span>
-            {% if pending_repayment_loan %}
-            <a href="{{ url_for('loans.view_loan', loan_id=pending_repayment_loan.id) }}" class="btn btn-sm btn-info">Review</a>
-            {% else %}
-            <a href="{{ url_for('admin.pending_repayments') }}" class="btn btn-sm btn-info">Review</a>
-            {% endif %}
-        </div>
-        {% endif %}
-
-        {% if pending_withdrawal_approvals > 0 %}
-        <div class="alert alert-primary d-flex justify-content-between align-items-center py-2 mb-0">
-            <span><i class="bi bi-clock"></i> {{ pending_withdrawal_approvals }} withdrawal(s) awaiting approval</span>
-            {% if pending_withdrawal_request %}
-            <!-- FIXED: Changed from wallet.pending_withdrawals to admin.pending_withdrawals -->
-            <a href="{{ url_for('admin.pending_withdrawals', group_id=pending_withdrawal_request.group_id) }}" class="btn btn-sm btn-primary">Review</a>
-            {% else %}
-            <a href="#" class="btn btn-sm btn-primary disabled">Review</a>
-            {% endif %}
-        </div>
-        {% endif %}
-    </div>
-</div>
-{% endif %}
-
-<!-- My Stats Row -->
-<div class="row mb-3">
-    <div class="col-6 col-md-3 mb-2">
-        <div class="card text-center py-2">
-            <div class="card-body py-2">
-                <small class="text-muted">My Groups</small>
-                <h4 class="mb-0">{{ groups|length }}</h4>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3 mb-2">
-        <div class="card text-center py-2">
-            <div class="card-body py-2">
-                <small class="text-muted">My Contributions</small>
-                <h4 class="mb-0 text-success">₹{{ "{:,.0f}".format(total_contributions) }}</h4>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3 mb-2">
-        <div class="card text-center py-2">
-            <div class="card-body py-2">
-                <small class="text-muted">My Interest Earned</small>
-                <h4 class="mb-0 text-primary">₹{{ "{:,.0f}".format(total_interest_earned) }}</h4>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3 mb-2">
-        <div class="card text-center py-2">
-            <div class="card-body py-2">
-                <small class="text-muted">My Outstanding</small>
-                <h4 class="mb-0 text-danger">₹{{ "{:,.0f}".format(total_outstanding) }}</h4>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Next EMI Due - Only show if due within 5 days -->
-{% if next_emi %}
-    {% set days_until_due = (next_emi.due_date - now.date()).days %}
-    {% if days_until_due <= 5 and days_until_due >= 0 %}
-    <div class="row mb-3">
+    <!-- Alerts Section -->
+    {% if pending_votes > 0 or pending_repayment_approvals > 0 or pending_withdrawal_approvals > 0 %}
+    <div class="row mb-4">
         <div class="col-12">
-            <div class="card border-warning">
-                <div class="card-body py-2 d-flex justify-content-between align-items-center">
-                    <div>
-                        <i class="bi bi-calendar-event text-warning"></i>
-                        <strong>Your Next EMI:</strong>
-                        ₹{{ "{:,.0f}".format(next_emi.emi_amount) }} on {{ next_emi.due_date.strftime('%d %b %Y') }}
-                        <span class="text-muted">({{ next_emi.loan.group.name }})</span>
-                        {% if days_until_due == 0 %}
-                            <span class="badge bg-danger ms-2">Due Today</span>
-                        {% elif days_until_due == 1 %}
-                            <span class="badge bg-warning ms-2">Due Tomorrow</span>
-                        {% else %}
-                            <span class="badge bg-info ms-2">Due in {{ days_until_due }} days</span>
-                        {% endif %}
-                    </div>
-                    <a href="{{ url_for('loans.repay_loan', loan_id=next_emi.loan_id) }}" class="btn btn-sm btn-warning">
-                        Pay Now
-                    </a>
+            {% if pending_votes > 0 %}
+            <div class="alert alert-custom alert-custom-warning d-flex justify-content-between align-items-center mb-2 py-3">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-exclamation-triangle me-2 fs-5"></i>
+                    <span class="fw-medium">{{ pending_votes }} loan request(s) need your vote</span>
+                </div>
+                {% if pending_loan_for_vote %}
+                <a href="{{ url_for('loans.view_loan', loan_id=pending_loan_for_vote.id) }}"
+                   class="btn btn-sm btn-warning fw-medium">
+                    Vote Now
+                </a>
+                {% else %}
+                <a href="{{ url_for('loans.my_loans') }}" class="btn btn-sm btn-warning fw-medium">
+                    Vote Now
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if pending_repayment_approvals > 0 %}
+            <div class="alert alert-custom alert-custom-info d-flex justify-content-between align-items-center mb-2 py-3">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-clock-history me-2 fs-5"></i>
+                    <span class="fw-medium">{{ pending_repayment_approvals }} repayment(s) awaiting approval</span>
+                </div>
+                {% if pending_repayment_loan %}
+                <a href="{{ url_for('loans.view_loan', loan_id=pending_repayment_loan.id) }}"
+                   class="btn btn-sm btn-info fw-medium">
+                    Review
+                </a>
+                {% else %}
+                <a href="{{ url_for('admin.pending_repayments') }}" class="btn btn-sm btn-info fw-medium">
+                    Review
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if pending_withdrawal_approvals > 0 %}
+            <div class="alert alert-custom alert-custom-primary d-flex justify-content-between align-items-center mb-0 py-3">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-clock me-2 fs-5"></i>
+                    <span class="fw-medium">{{ pending_withdrawal_approvals }} withdrawal(s) awaiting approval</span>
+                </div>
+                {% if pending_withdrawal_request %}
+                <a href="{{ url_for('admin.pending_withdrawals', group_id=pending_withdrawal_request.group_id) }}"
+                   class="btn btn-sm btn-primary fw-medium">
+                    Review
+                </a>
+                {% else %}
+                <a href="#" class="btn btn-sm btn-primary fw-medium disabled">
+                    Review
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Stats Section -->
+    <div class="row mb-4 dashboard-stats">
+        <div class="col-6 col-md-3 mb-3">
+            <div class="card h-100 card-hover border-0 shadow-sm">
+                <div class="card-body py-4">
+                    <small class="text-muted d-block mb-1">My Groups</small>
+                    <h3 class="mb-0 fw-bold" style="color: var(--secondary-color);">{{ groups|length }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 mb-3">
+            <div class="card h-100 card-hover border-0 shadow-sm">
+                <div class="card-body py-4">
+                    <small class="text-muted d-block mb-1">My Contributions</small>
+                    <h3 class="mb-0 fw-bold" style="color: var(--primary-color);">₹{{ "{:,.0f}".format(total_contributions) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 mb-3">
+            <div class="card h-100 card-hover border-0 shadow-sm">
+                <div class="card-body py-4">
+                    <small class="text-muted d-block mb-1">My Interest Earned</small>
+                    <h3 class="mb-0 fw-bold" style="color: #17a2b8;">₹{{ "{:,.0f}".format(total_interest_earned) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 mb-3">
+            <div class="card h-100 card-hover border-0 shadow-sm">
+                <div class="card-body py-4">
+                    <small class="text-muted d-block mb-1">My Outstanding</small>
+                    <h3 class="mb-0 fw-bold" style="color: #dc3545;">₹{{ "{:,.0f}".format(total_outstanding) }}</h3>
                 </div>
             </div>
         </div>
     </div>
-    {% endif %}
-{% endif %}
 
-<!-- Main Content -->
-<div class="row">
-
-    <!-- My Groups -->
-    <div class="col-md-4 mb-3">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center py-2">
-                <span><i class="bi bi-people"></i> My Groups</span>
-                <a href="{{ url_for('groups.list_groups') }}" class="btn btn-sm btn-outline-primary">View All</a>
-            </div>
-            <div class="card-body p-0">
-                {% if groups %}
-                <ul class="list-group list-group-flush">
-                    {% for group in groups[:4] %}
-                    <a href="{{ url_for('groups.view_group', group_id=group.id) }}"
-                       class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
-                        <div class="d-flex align-items-center flex-grow-1">
-                            <div class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center me-3 flex-shrink-0"
-                                 style="width: 40px; height: 40px;">
-                                <i class="bi bi-people-fill"></i>
-                            </div>
-                            <div class="flex-grow-1">
-                                <div class="fw-bold text-dark mb-0">
-                                    {{ group.name[:30] }}{% if group.name|length > 30 %}...{% endif %}
-                                </div>
-                                <div class="text-muted" style="font-size: 0.85rem;">
-                                    {{ group.get_active_member_count() }} members
-                                    {% if group.wallet %}
-                                    <span class="mx-1">-</span>
-                                    <span class="text-success fw-medium">
-                                        ₹{{ "{:,.0f}".format(group.wallet.balance) }}
-                                    </span>
+    <!-- Next EMI Due Section -->
+    {% if next_emi %}
+        {% set days_until_due = (next_emi.due_date - now.date()).days %}
+        {% if days_until_due <= 5 and days_until_due >= 0 %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-warning border-2 shadow-sm">
+                    <div class="card-body py-3 d-flex flex-column flex-md-row justify-content-between align-items-center">
+                        <div class="d-flex align-items-center mb-3 mb-md-0">
+                            <i class="bi bi-calendar-event fs-4 text-warning me-3"></i>
+                            <div>
+                                <strong class="d-block">Your Next EMI</strong>
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <span class="fw-bold fs-5">₹{{ "{:,.0f}".format(next_emi.emi_amount) }}</span>
+                                    <span class="text-muted">on {{ next_emi.due_date.strftime('%d %b %Y') }}</span>
+                                    <span class="text-muted small">({{ next_emi.loan.group.name }})</span>
+                                    {% if days_until_due == 0 %}
+                                        <span class="badge bg-danger">Due Today</span>
+                                    {% elif days_until_due == 1 %}
+                                        <span class="badge bg-warning text-dark">Due Tomorrow</span>
+                                    {% else %}
+                                        <span class="badge bg-info">Due in {{ days_until_due }} days</span>
                                     {% endif %}
                                 </div>
                             </div>
                         </div>
-                        <i class="bi bi-chevron-right text-muted"></i>
+                        <a href="{{ url_for('loans.repay_loan', loan_id=next_emi.loan_id) }}"
+                           class="btn btn-warning fw-medium px-4">
+                            <i class="bi bi-credit-card me-1"></i>Pay Now
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    {% endif %}
+
+    <!-- Main Dashboard Content -->
+    <div class="row g-3">
+        <!-- My Groups Card -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="bi bi-people me-2"></i>My Groups
+                    </h5>
+                    <a href="{{ url_for('groups.list_groups') }}" class="btn btn-sm btn-outline-primary">
+                        View All
                     </a>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <div class="text-center py-4">
-                    <p class="text-muted mb-2">No groups yet</p>
-                    <a href="{{ url_for('groups.create_group') }}" class="btn btn-primary btn-sm">Create First Group</a>
                 </div>
-                {% endif %}
+                <div class="card-body p-0">
+                    {% if groups %}
+                    <div class="list-group list-group-flush">
+                        {% for group in groups[:4] %}
+                        <a href="{{ url_for('groups.view_group', group_id=group.id) }}"
+                           class="list-group-item list-group-item-action border-0 py-3 px-4 card-hover">
+                            <div class="d-flex align-items-center">
+                                <div class="group-avatar">
+                                    <i class="bi bi-people-fill"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <h6 class="fw-bold mb-0 text-dark group-name-truncate">
+                                        {{ group.name }}</h6>
+                                        <div class="text-muted small flex-shrink-0">
+                                           <i class="bi bi-person me-1"></i>{{ group.get_active_member_count() }}
+                                        </div>
+
+                                    </div>
+                                    <div class="text-muted small">
+                                        {% if group.wallet %}
+                                        <span class="badge bg-success bg-opacity-10 text-success fw-medium">
+                                            ₹{{ "{:,.0f}".format(group.wallet.balance) }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 px-4">
+                        <div class="mb-3">
+                            <i class="bi bi-people text-muted fs-1"></i>
+                        </div>
+                        <h6 class="text-muted mb-2">No groups yet</h6>
+                        <p class="text-muted small mb-3">Create your first savings group</p>
+                        <a href="{{ url_for('groups.create_group') }}" class="btn btn-primary btn-sm">
+                            <i class="bi bi-plus me-1"></i>Create Group
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- My Active Loans -->
-    <div class="col-md-4 mb-3">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center py-2">
-                <span><i class="bi bi-cash-stack"></i> My Active Loans</span>
-                <a href="{{ url_for('loans.my_loans') }}" class="btn btn-sm btn-outline-primary">View All</a>
-            </div>
-            <div class="card-body p-0">
-                {% if active_loans %}
-                <ul class="list-group list-group-flush">
-                    {% for loan in active_loans[:4] %}
-                    {% set remaining = loan.get_remaining_amount() %}
-                    {% set progress = ((loan.total_repaid / loan.total_repayable) * 100) if loan.total_repayable and loan.total_repayable > 0 else 0 %}
-                    <li class="list-group-item py-2">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <strong>{{ loan.group.name }}</strong>
-                            <small class="text-danger">₹{{ "{:,.0f}".format(remaining) }}</small>
-                        </div>
-                        <div class="progress mt-1" style="height: 5px;">
-                            <div class="progress-bar bg-success" style="width: {{ progress }}%"></div>
-                        </div>
-                        <small class="text-muted">{{ "%.0f"|format(progress) }}% repaid</small>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <div class="text-center py-4">
-                    <i class="bi bi-check-circle text-success"></i>
-                    <p class="text-muted mb-0">No active loans</p>
+        <!-- My Active Loans Card -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="bi bi-cash-stack me-2"></i>My Active Loans
+                    </h5>
+                    <a href="{{ url_for('loans.my_loans') }}" class="btn btn-sm btn-outline-primary">
+                        View All
+                    </a>
                 </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    <!-- My Recent Activity -->
-    <div class="col-md-4 mb-3">
-        <div class="card h-100">
-            <div class="card-header py-2">
-                <i class="bi bi-activity"></i> My Recent Activity
-            </div>
-            <div class="card-body p-0">
-                {% if recent_activities %}
-                <ul class="list-group list-group-flush">
-                    {% for activity in recent_activities %}
-                    <li class="list-group-item py-2">
-                        <div class="d-flex align-items-start">
-                            <i class="bi {{ activity.icon }} me-2 mt-1 text-{{ activity.color }}"></i>
-                            <div>
-                                <small>{{ activity.message }}</small>
-                                <br>
-                                <small class="text-muted">{{ activity.time_ago }}</small>
+                <div class="card-body p-0">
+                    {% if active_loans %}
+                    <div class="list-group list-group-flush">
+                        {% for loan in active_loans[:4] %}
+                        {% set remaining = loan.get_remaining_amount() %}
+                        {% set progress = ((loan.total_repaid / loan.total_repayable) * 100) if loan.total_repayable and loan.total_repayable > 0 else 0 %}
+                        <div class="list-group-item border-0 py-3 px-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-medium text-dark">{{ loan.group.name }}</span>
+                                <span class="fw-bold text-danger">₹{{ "{:,.0f}".format(remaining) }}</span>
+                            </div>
+                            <div class="progress progress-thin mb-1">
+                                <div class="progress-bar bg-success" role="progressbar"
+                                     style="width: {{ progress }}%"
+                                     aria-valuenow="{{ progress }}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100"></div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">{{ "%.0f"|format(progress) }}% repaid</small>
+                                <a href="{{ url_for('loans.view_loan', loan_id=loan.id) }}"
+                                   class="btn btn-sm btn-outline-primary py-0 px-2">
+                                    View
+                                </a>
                             </div>
                         </div>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <div class="text-center py-4">
-                    <p class="text-muted mb-0">No recent activity</p>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 px-4">
+                        <div class="mb-3">
+                            <i class="bi bi-check-circle text-success fs-1"></i>
+                        </div>
+                        <h6 class="text-muted mb-2">No active loans</h6>
+                        <p class="text-muted small">All your loans are cleared</p>
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
+            </div>
+        </div>
+
+        <!-- My Recent Activity Card -->
+        <div class="col-lg-4 col-md-12">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="bi bi-activity me-2"></i>Recent Activity
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if recent_activities %}
+                    <div class="list-group list-group-flush">
+                        {% for activity in recent_activities %}
+                        <div class="list-group-item border-0 py-3 px-4">
+                            <div class="d-flex">
+                                <div class="flex-shrink-0">
+                                    <i class="bi {{ activity.icon }} activity-icon text-{{ activity.color }}"></i>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <p class="mb-1 small">{{ activity.message }}</p>
+                                    <small class="text-muted">{{ activity.time_ago }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 px-4">
+                        <div class="mb-3">
+                            <i class="bi bi-clock-history text-muted fs-1"></i>
+                        </div>
+                        <h6 class="text-muted mb-2">No recent activity</h6>
+                        <p class="text-muted small">Your activity will appear here</p>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
-
 </div>
-
 {% endblock %}

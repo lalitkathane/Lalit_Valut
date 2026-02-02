@@ -8,24 +8,32 @@
 
     <!-- Group Name -->
     <div class="mb-3">
-        <label class="form-label fw-semibold mb-1" for="nameInput">Group Name</label>
+        <label class="form-label fw-semibold mb-1" for="nameInput">
+            Group Name <span class="text-danger">*</span>
+        </label>
         <input type="text" name="name" id="nameInput" class="form-control form-control-lg rounded-2"
                placeholder="e.g., Mahila Bachat Gat" required maxlength="40"
                value="{{ group.name if group else '' }}" autofocus>
         <div class="form-text d-flex justify-content-between mt-1">
-            <small class="text-muted">Give your group a unique name</small>
-            <small id="nameCount" class="text-muted">{{ (group.name|length if group else 0) }} / 40</small>
+            <small class="text-muted">Give your group a unique name (3-40 characters)</small>
+            <small id="nameCount" class="text-muted char-count">{{ (group.name|length if group else 0) }} / 40</small>
         </div>
     </div>
 
-    <!-- Description -->
+    <!-- Description - FIXED: Added required and minlength -->
     <div class="mb-3">
-        <label class="form-label fw-semibold mb-1" for="descInput">Description (Optional)</label>
-        <textarea name="description" id="descInput" class="form-control rounded-2" rows="2"
-                  placeholder="Brief description of group purpose" maxlength="250">{{ group.description if group else '' }}</textarea>
-        <div class="form-text d-flex justify-content-end mt-1">
-            <small id="descCount" class="text-muted">{{ (group.description|length if group else 0) }} / 250</small>
+        <label class="form-label fw-semibold mb-1" for="descInput">
+            Description <span class="text-danger">*</span>
+        </label>
+        <textarea name="description" id="descInput" class="form-control rounded-2" rows="3"
+                  placeholder="Brief description of group purpose (minimum 10 characters)"
+                  maxlength="250" minlength="10" required>{{ group.description if group else '' }}</textarea>
+        <div class="form-text d-flex justify-content-between mt-1">
+            <small class="text-muted">Describe the group's purpose (10-250 characters)</small>
+            <small id="descCount" class="text-muted char-count">{{ (group.description|length if group else 0) }} / 250</small>
         </div>
+        <!-- Validation message container -->
+        <div id="descValidation" class="validation-message mt-1"></div>
     </div>
 </div>
 
@@ -47,28 +55,34 @@
             <div class="row g-3">
                 <!-- Interest Rate -->
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold small mb-1" for="interestrate">Interest Rate (% per year)</label>
+                    <label class="form-label fw-semibold small mb-1" for="interestrate">
+                        Interest Rate (% per year) <span class="text-danger">*</span>
+                    </label>
                     <div class="input-group">
                         <input type="number" id="interestrate" name="interest_rate" class="form-control rounded-2"
-                               value="{{ group.default_interest_rate if group else 12 }}" min="0" max="50" step="0.5">
+                               value="{{ group.default_interest_rate if group else 12 }}" min="0" max="50" step="0.5" required>
                         <span class="input-group-text bg-white rounded-end">%</span>
                     </div>
                 </div>
 
                 <!-- Loan Duration -->
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold small mb-1" for="loanduration">Max Duration</label>
+                    <label class="form-label fw-semibold small mb-1" for="loanduration">
+                        Max Duration <span class="text-danger">*</span>
+                    </label>
                     <div class="input-group">
                         <input type="number" id="loanduration" name="loan_duration" class="form-control rounded-2"
-                               value="{{ group.default_loan_duration_months if group else 12 }}" min="1" max="60">
+                               value="{{ group.default_loan_duration_months if group else 12 }}" min="1" max="60" required>
                         <span class="input-group-text bg-white rounded-end">months</span>
                     </div>
                 </div>
 
                 <!-- Repayment Type -->
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold small mb-1" for="repaymenttype">Repayment Type</label>
-                    <select id="repaymenttype" name="repayment_type" class="form-select rounded-2">
+                    <label class="form-label fw-semibold small mb-1" for="repaymenttype">
+                        Repayment Type <span class="text-danger">*</span>
+                    </label>
+                    <select id="repaymenttype" name="repayment_type" class="form-select rounded-2" required>
                         <option value="emi" {% if group and group.default_repayment_type == 'emi' %}selected{% endif %}>Monthly EMI</option>
                         <option value="bullet" {% if group and group.default_repayment_type == 'bullet' %}selected{% endif %}>Lump Sum</option>
                     </select>
@@ -100,3 +114,21 @@
         </div>
     </div>
 </div>
+
+<script src="{{ url_for('static', filename='js/group_validation.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Setup description validation
+    GroupFormValidator.setupDescriptionValidation('descInput', 'descCount', 'descValidation');
+
+    // Name character counter
+    const nameInput = document.getElementById('nameInput');
+    const nameCount = document.getElementById('nameCount');
+    if (nameInput && nameCount) {
+        nameInput.addEventListener('input', function() {
+            nameCount.textContent = `${this.value.length} / 40`;
+        });
+        nameCount.textContent = `${nameInput.value.length} / 40`;
+    }
+});
+</script>
