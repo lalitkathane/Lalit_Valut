@@ -4,40 +4,6 @@
 
 {% block extra_css %}
 <style>
-    /* Dashboard-specific styling */
-    .dashboard-stats .card {
-        border-radius: 12px;
-        border: 1px solid #eee;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        transition: all 0.3s ease;
-        min-height: 120px;
-    }
-
-    .dashboard-stats .card:hover {
-        box-shadow: 0 6px 20px rgba(0,0,0,0.08);
-    }
-
-    .dashboard-stats .card-body {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-    }
-
-    /* Custom button styling */
-    .btn-custom-success {
-        background-color: var(--primary-color) !important;
-        border-color: var(--primary-color) !important;
-        color: white !important;
-    }
-
-    .btn-custom-success:hover {
-        background-color: #00a884 !important;
-        border-color: #00a884 !important;
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0, 184, 148, 0.3);
-    }
-
     /* Custom alert styling */
     .alert-custom {
         border-radius: 8px;
@@ -110,18 +76,28 @@
         box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1) !important;
     }
 
-    /* Add to dashboard.html extra_css section */
+    /* Group name truncation */
     .group-name-truncate {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        max-width: 180px; /* Adjust as needed */
+        max-width: 180px;
+    }
+
+    /* Card header styling with dark bottom border */
+    .card-header-dark-border {
+        border-bottom: 2px solid #dee2e6 !important;
     }
 
     /* For smaller screens */
     @media (max-width: 768px) {
         .group-name-truncate {
             max-width: 250px;
+        }
+
+        .dashboard-stats .col-6 {
+            padding-left: 5px;
+            padding-right: 5px;
         }
     }
 </style>
@@ -134,11 +110,11 @@
     <!-- Welcome Section -->
     <div class="row mb-4 align-items-center">
         <div class="col-md-6 col-12 mb-3 mb-md-0">
-            <h2 class="fw-bold mb-1" style="color: var(--secondary-color);">
+            <h2 class="fw-bold mb-1 primary_color">
                 Welcome, {{ current_user.name }}! 👋
             </h2>
             <p class="text-muted mb-0">
-                <i class="bi bi-shield-check me-1" style="color: var(--primary-color);"></i>
+                <i class="bi bi-shield-check me-1 secondary_color"></i>
                 Your personal financial summary
                 {% if current_user.phone %}
                 <span class="ms-2">
@@ -148,7 +124,7 @@
             </p>
         </div>
         <div class="col-md-6 col-12 text-md-end">
-            <a href="{{ url_for('groups.create_group') }}" class="btn btn-custom-success fw-medium">
+            <a href="{{ url_for('groups.create_group') }}" class="btn btn-primary fw-medium">
                 <i class="bi bi-plus-circle me-2"></i>Create New Group
             </a>
         </div>
@@ -218,89 +194,87 @@
     </div>
     {% endif %}
 
-    <!-- Stats Section -->
-    <div class="row mb-4 dashboard-stats">
-        <div class="col-6 col-md-3 mb-3">
-            <div class="card h-100 card-hover border-0 shadow-sm">
-                <div class="card-body py-4">
-                    <small class="text-muted d-block mb-1">My Groups</small>
-                    <h3 class="mb-0 fw-bold" style="color: var(--secondary-color);">{{ groups|length }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3 mb-3">
-            <div class="card h-100 card-hover border-0 shadow-sm">
-                <div class="card-body py-4">
-                    <small class="text-muted d-block mb-1">My Contributions</small>
-                    <h3 class="mb-0 fw-bold" style="color: var(--primary-color);">₹{{ "{:,.0f}".format(total_contributions) }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3 mb-3">
-            <div class="card h-100 card-hover border-0 shadow-sm">
-                <div class="card-body py-4">
-                    <small class="text-muted d-block mb-1">My Interest Earned</small>
-                    <h3 class="mb-0 fw-bold" style="color: #17a2b8;">₹{{ "{:,.0f}".format(total_interest_earned) }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3 mb-3">
-            <div class="card h-100 card-hover border-0 shadow-sm">
-                <div class="card-body py-4">
-                    <small class="text-muted d-block mb-1">My Outstanding</small>
-                    <h3 class="mb-0 fw-bold" style="color: #dc3545;">₹{{ "{:,.0f}".format(total_outstanding) }}</h3>
-                </div>
+
+
+
+
+
+
+
+
+<!-- Stats Cards -->
+<div class="row mb-4 dashboard-stats">
+    <div class="col-6 col-md-3 mb-3">
+        <div class="card h-100 card-hover border-0 shadow-sm bg-stat-blue text-center">
+            <div class="card-body py-4">
+                <i class="bi bi-people fs-4 text-stat-blue"></i>
+                <h3 class="mb-2 mt-2 fw-bold text-stat-blue">{{ groups|length }}</h3>
+                <small class="fw-semibold text-stat-blue-muted">My Groups</small>
             </div>
         </div>
     </div>
 
-    <!-- Next EMI Due Section -->
-    {% if next_emi %}
-        {% set days_until_due = (next_emi.due_date - now.date()).days %}
-        {% if days_until_due <= 5 and days_until_due >= 0 %}
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card border-warning border-2 shadow-sm">
-                    <div class="card-body py-3 d-flex flex-column flex-md-row justify-content-between align-items-center">
-                        <div class="d-flex align-items-center mb-3 mb-md-0">
-                            <i class="bi bi-calendar-event fs-4 text-warning me-3"></i>
-                            <div>
-                                <strong class="d-block">Your Next EMI</strong>
-                                <div class="d-flex flex-wrap align-items-center gap-2">
-                                    <span class="fw-bold fs-5">₹{{ "{:,.0f}".format(next_emi.emi_amount) }}</span>
-                                    <span class="text-muted">on {{ next_emi.due_date.strftime('%d %b %Y') }}</span>
-                                    <span class="text-muted small">({{ next_emi.loan.group.name }})</span>
-                                    {% if days_until_due == 0 %}
-                                        <span class="badge bg-danger">Due Today</span>
-                                    {% elif days_until_due == 1 %}
-                                        <span class="badge bg-warning text-dark">Due Tomorrow</span>
-                                    {% else %}
-                                        <span class="badge bg-info">Due in {{ days_until_due }} days</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        <a href="{{ url_for('loans.repay_loan', loan_id=next_emi.loan_id) }}"
-                           class="btn btn-warning fw-medium px-4">
-                            <i class="bi bi-credit-card me-1"></i>Pay Now
-                        </a>
-                    </div>
-                </div>
+    <div class="col-6 col-md-3 mb-3">
+        <div class="card h-100 card-hover border-0 shadow-sm bg-stat-green text-center">
+            <div class="card-body py-4">
+                <i class="bi bi-cash-coin fs-4 text-stat-green"></i>
+                <h3 class="mb-2 mt-2 fw-bold text-stat-green">₹{{ "{:,.0f}".format(total_contributions) }}</h3>
+                <small class="fw-semibold text-stat-green-muted">My Contributions</small>
             </div>
         </div>
-        {% endif %}
-    {% endif %}
+    </div>
 
-    <!-- Main Dashboard Content -->
+    <div class="col-6 col-md-3 mb-3">
+        <div class="card h-100 card-hover border-0 shadow-sm bg-stat-yellow text-center">
+            <div class="card-body py-4">
+                <i class="bi bi-graph-up-arrow fs-4 text-stat-yellow"></i>
+                <h3 class="mb-2 mt-2 fw-bold text-stat-yellow">₹{{ "{:,.0f}".format(total_interest_earned) }}</h3>
+                <small class="fw-semibold text-stat-yellow-muted">My Interest Earned</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3 mb-3">
+        <div class="card h-100 card-hover border-0 shadow-sm bg-stat-red text-center">
+            <div class="card-body py-4">
+                <i class="bi bi-clock-history fs-4 text-stat-red"></i>
+                <h3 class="mb-2 mt-2 fw-bold text-stat-red">₹{{ "{:,.0f}".format(total_outstanding) }}</h3>
+                <small class="fw-semibold text-stat-red-muted">My Outstanding</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <!-- Main Cards Section -->
     <div class="row g-3">
         <!-- My Groups Card -->
         <div class="col-lg-4 col-md-6">
             <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
-                    <h5 class="mb-0 fw-bold">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3 card-header-dark-border card-header-consistent">
+                    <h5 class="mb-0 fw-bold text-primary">
                         <i class="bi bi-people me-2"></i>My Groups
                     </h5>
-                    <a href="{{ url_for('groups.list_groups') }}" class="btn btn-sm btn-outline-primary">
+                    <a href="{{ url_for('groups.list_groups') }}" class="btn btn-outline-primary btn-sm">
                         View All
                     </a>
                 </div>
@@ -311,19 +285,20 @@
                         <a href="{{ url_for('groups.view_group', group_id=group.id) }}"
                            class="list-group-item list-group-item-action border-0 py-3 px-4 card-hover">
                             <div class="d-flex align-items-center">
-                                <div class="group-avatar">
+                                <div class="group-avatar me-3 d-flex align-items-center justify-content-center rounded bg-group-avatar"
+                                     style="width: 40px; height: 40px;">
                                     <i class="bi bi-people-fill"></i>
                                 </div>
                                 <div class="flex-grow-1">
                                     <div class="d-flex justify-content-between align-items-start mb-1">
                                         <h6 class="fw-bold mb-0 text-dark group-name-truncate">
-                                        {{ group.name }}</h6>
+                                            {{ group.name }}
+                                        </h6>
                                         <div class="text-muted small flex-shrink-0">
-                                           <i class="bi bi-person me-1"></i>{{ group.get_active_member_count() }}
+                                            <i class="bi bi-person me-1"></i>{{ group.get_active_member_count() }}
                                         </div>
-
                                     </div>
-                                    <div class="text-muted small">
+                                    <div>
                                         {% if group.wallet %}
                                         <span class="badge bg-success bg-opacity-10 text-success fw-medium">
                                             ₹{{ "{:,.0f}".format(group.wallet.balance) }}
@@ -340,8 +315,7 @@
                         <div class="mb-3">
                             <i class="bi bi-people text-muted fs-1"></i>
                         </div>
-                        <h6 class="text-muted mb-2">No groups yet</h6>
-                        <p class="text-muted small mb-3">Create your first savings group</p>
+                        <h6 class="text-muted mb-3">No groups yet</h6>
                         <a href="{{ url_for('groups.create_group') }}" class="btn btn-primary btn-sm">
                             <i class="bi bi-plus me-1"></i>Create Group
                         </a>
@@ -354,11 +328,11 @@
         <!-- My Active Loans Card -->
         <div class="col-lg-4 col-md-6">
             <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3">
-                    <h5 class="mb-0 fw-bold">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3 card-header-dark-border card-header-consistent">
+                    <h5 class="mb-0 fw-bold text-danger">
                         <i class="bi bi-cash-stack me-2"></i>My Active Loans
                     </h5>
-                    <a href="{{ url_for('loans.my_loans') }}" class="btn btn-sm btn-outline-primary">
+                    <a href="{{ url_for('loans.my_loans') }}" class="btn btn-outline-danger btn-sm">
                         View All
                     </a>
                 </div>
@@ -370,12 +344,12 @@
                         {% set progress = ((loan.total_repaid / loan.total_repayable) * 100) if loan.total_repayable and loan.total_repayable > 0 else 0 %}
                         <div class="list-group-item border-0 py-3 px-4">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="fw-medium text-dark">{{ loan.group.name }}</span>
+                                <span class="fw-medium text-dark group-name-truncate">{{ loan.group.name }}</span>
                                 <span class="fw-bold text-danger">₹{{ "{:,.0f}".format(remaining) }}</span>
                             </div>
-                            <div class="progress progress-thin mb-1">
-                                <div class="progress-bar bg-success" role="progressbar"
-                                     style="width: {{ progress }}%"
+                            <div class="progress progress-thin mb-2" style="height: 6px;">
+                                <div class="progress-bar bg-danger" role="progressbar"
+                                     style="width: {{ progress }}%;"
                                      aria-valuenow="{{ progress }}"
                                      aria-valuemin="0"
                                      aria-valuemax="100"></div>
@@ -383,7 +357,7 @@
                             <div class="d-flex justify-content-between align-items-center">
                                 <small class="text-muted">{{ "%.0f"|format(progress) }}% repaid</small>
                                 <a href="{{ url_for('loans.view_loan', loan_id=loan.id) }}"
-                                   class="btn btn-sm btn-outline-primary py-0 px-2">
+                                   class="btn btn-outline-danger btn-sm py-0 px-2">
                                     View
                                 </a>
                             </div>
@@ -393,7 +367,7 @@
                     {% else %}
                     <div class="text-center py-5 px-4">
                         <div class="mb-3">
-                            <i class="bi bi-check-circle text-success fs-1"></i>
+                            <i class="bi bi-check-circle fs-1 text-success"></i>
                         </div>
                         <h6 class="text-muted mb-2">No active loans</h6>
                         <p class="text-muted small">All your loans are cleared</p>
@@ -403,13 +377,15 @@
             </div>
         </div>
 
-        <!-- My Recent Activity Card -->
+        <!-- Recent Activity Card -->
         <div class="col-lg-4 col-md-12">
             <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-white border-0 py-3">
-                    <h5 class="mb-0 fw-bold">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-3 card-header-dark-border card-header-consistent">
+                    <h5 class="mb-0 fw-bold text-secondary">
                         <i class="bi bi-activity me-2"></i>Recent Activity
                     </h5>
+                    <!-- Empty spacer div to maintain alignment -->
+                    <div style="width: 70px;"></div>
                 </div>
                 <div class="card-body p-0">
                     {% if recent_activities %}
@@ -418,10 +394,13 @@
                         <div class="list-group-item border-0 py-3 px-4">
                             <div class="d-flex">
                                 <div class="flex-shrink-0">
-                                    <i class="bi {{ activity.icon }} activity-icon text-{{ activity.color }}"></i>
+                                    <div class="d-flex align-items-center justify-content-center rounded-circle bg-activity-icon"
+                                         style="width: 32px; height: 32px;">
+                                        <i class="bi {{ activity.icon }} small text-muted"></i>
+                                    </div>
                                 </div>
                                 <div class="flex-grow-1 ms-3">
-                                    <p class="mb-1 small">{{ activity.message }}</p>
+                                    <p class="mb-1 small text-dark">{{ activity.message }}</p>
                                     <small class="text-muted">{{ activity.time_ago }}</small>
                                 </div>
                             </div>
@@ -434,7 +413,6 @@
                             <i class="bi bi-clock-history text-muted fs-1"></i>
                         </div>
                         <h6 class="text-muted mb-2">No recent activity</h6>
-                        <p class="text-muted small">Your activity will appear here</p>
                     </div>
                     {% endif %}
                 </div>

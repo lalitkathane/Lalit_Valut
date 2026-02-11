@@ -55,13 +55,18 @@ def contribute(group_id):
         user_id=current_user.id
     ).first()
 
+    # Get monthly contribution status
+    monthly_status = get_monthly_contribution_status(current_user.id, wallet.id)
+
     if request.method == 'POST':
         try:
             amount = float(request.form.get('amount', 0))
             description = request.form.get('description', '')
 
-            # Validate contribution data
-            is_valid, validated_description = validate_contribution_data(amount, description)
+            # Validate contribution data WITH MONTHLY LIMIT CHECK
+            is_valid, validated_description = validate_contribution_data(
+                amount, description, current_user.id, wallet.id
+            )
             if not is_valid:
                 flash(validated_description, 'danger')
                 return render_template(
@@ -95,7 +100,8 @@ def contribute(group_id):
         'wallet/contribute.html',
         group=group,
         wallet=wallet,
-        user_ledger=user_ledger
+        user_ledger=user_ledger,
+        monthly_status=monthly_status  # Pass to template
     )
 
 

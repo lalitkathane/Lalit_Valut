@@ -22,7 +22,7 @@ body {
     font-family: 'Inter', sans-serif;
     line-height: 1.6;
     color: var(--text-color);
-    background-color: var(--white);
+    background-color: #F8FAFC;
     scroll-behavior: smooth;
     display: flex;
     flex-direction: column;
@@ -656,3 +656,114 @@ body.menu-open::after {
     z-index: 998;
 }
 
+/*=======================================================*/
+
+.dashboard-stats .card {
+    border-radius: 12px;
+    border: 1px solid #eee;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+    min-height: 120px;
+}
+
+.dashboard-stats .card:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+}
+
+.dashboard-stats .card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+/*----------------------------------------*/
+.primary_color{
+  color: var(--secondary-color);
+}
+
+.secondary_color{
+     color: var(--primary-color);
+}
+
+/*================================================================================*/
+/* Stats Card Colors - For reuse across the application */
+.bg-stat-blue {
+    background-color: #E0F2FE !important;
+    border-radius: 12px !important;
+}
+
+.text-stat-blue {
+    color: #0369A1 !important;
+}
+
+.text-stat-blue-muted {
+    color: #0369A1 !important;
+    opacity: 0.8 !important;
+}
+
+.bg-stat-green {
+    background-color: #DCFCE7 !important;
+    border-radius: 12px !important;
+}
+
+.text-stat-green {
+    color: #15803D !important;
+}
+
+.text-stat-green-muted {
+    color: #15803D !important;
+    opacity: 0.8 !important;
+}
+
+.bg-stat-yellow {
+    background-color: #FEF9C3 !important;
+    border-radius: 12px !important;
+}
+
+.text-stat-yellow {
+    color: #A16207 !important;
+}
+
+.text-stat-yellow-muted {
+    color: #A16207 !important;
+    opacity: 0.8 !important;
+}
+
+.bg-stat-red {
+    background-color: #FEE2E2 !important;
+    border-radius: 12px !important;
+}
+
+.text-stat-red {
+    color: #B91C1C !important;
+}
+
+.text-stat-red-muted {
+    color: #B91C1C !important;
+    opacity: 0.8 !important;
+}
+
+/* Group avatar colors */
+.bg-group-avatar {
+    background-color: #E8F4FD !important;
+    color: #0D6EFD !important;
+}
+
+/* Activity icon background */
+.bg-activity-icon {
+    background-color: #F8F9FA !important;
+}
+
+/* Consistent card header height */
+.card-header-consistent {
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+}
+
+@media (max-width: 768px) {
+    .card-header-consistent {
+        min-height: 56px;
+    }
+}

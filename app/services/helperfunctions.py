@@ -810,15 +810,21 @@ def get_group_pending_repayments(group_id):
     ).all()
 
 
+# ====================================
+#  GROUP-RELATED HELPERS (NEW)
+# ====================================
+
 def is_last_admin_leaving(user_id, group_id):
     """Check if the leaving user is the last admin"""
+    # Import the function from authorization_service
+    from app.services.authorization_service import is_group_admin
+
     is_admin = is_group_admin(user_id, group_id)
     if not is_admin:
         return False
 
     admin_count = get_admin_count_in_group(group_id)
     return admin_count <= 1
-
 
 def is_group_empty(group_id):
     """Check if group has only one active member (the user checking)"""
@@ -1398,10 +1404,42 @@ def get_withdraw_form_data(group_id, user_id):
         'is_group_admin': is_group_admin(user_id, group_id)
     }, None
 
-def validate_contribution_data(amount, description):
-    """Validate contribution form data"""
+
+def validate_contribution_data(amount, description, user_id=None, wallet_id=None):
+    """Validate contribution form data with monthly limit"""
     if amount <= 0:
         return False, 'Please enter a valid amount greater than zero!'
+
+    # Single transaction limit
+    if amount > 20000:
+        return False, 'Single contribution cannot exceed ₹20,000!'
+
+    # Check monthly limit if user_id and wallet_id are provided
+    if user_id and wallet_id:
+        from datetime import datetime
+        from sqlalchemy import func, extract
+
+        now = datetime.utcnow()
+        current_month = now.month
+        current_year = now.year
+
+        # Calculate total contributions this month
+        monthly_total = db.session.query(
+            func.sum(MemberContribution.amount)
+        ).filter(
+            MemberContribution.user_id == user_id,
+            MemberContribution.wallet_id == wallet_id,
+            extract('month', MemberContribution.contributed_at) == current_month,
+            extract('year', MemberContribution.contributed_at) == current_year
+        ).scalar() or 0
+
+        MONTHLY_LIMIT = 20000
+        if monthly_total + amount > MONTHLY_LIMIT:
+            remaining_limit = MONTHLY_LIMIT - monthly_total
+            if remaining_limit > 0:
+                return False, f"Monthly limit: ₹{MONTHLY_LIMIT}. You've contributed ₹{monthly_total:.2f} this month. You can contribute up to ₹{remaining_limit:.2f} more."
+            else:
+                return False, f"Monthly limit reached! You've already contributed ₹{monthly_total:.2f} this month."
 
     if not description or len(description.strip()) == 0:
         description = "Contribution to group wallet"
@@ -1582,3 +1620,32 @@ def calculate_withdrawal_amounts(amount, member_balance):
         interest_amount = 0
 
     return principal_amount, interest_amount
+
+
+def get_monthly_contribution_status(user_id, wallet_id):
+    """Get user's monthly contribution status"""
+    from datetime import datetime
+    from sqlalchemy import func, extract
+
+    now = datetime.utcnow()
+    current_month = now.month
+    current_year = now.year
+
+    monthly_total = db.session.query(
+        func.sum(MemberContribution.amount)
+    ).filter(
+        MemberContribution.user_id == user_id,
+        MemberContribution.wallet_id == wallet_id,
+        extract('month', MemberContribution.contributed_at) == current_month,
+        extract('year', MemberContribution.contributed_at) == current_year
+    ).scalar() or 0
+
+    MONTHLY_LIMIT = 20000
+    remaining = MONTHLY_LIMIT - monthly_total
+
+    return {
+        'monthly_total': monthly_total,
+        'monthly_limit': MONTHLY_LIMIT,
+        'remaining_limit': remaining,
+        'percentage_used': (monthly_total / MONTHLY_LIMIT * 100) if MONTHLY_LIMIT > 0 else 0
+    }

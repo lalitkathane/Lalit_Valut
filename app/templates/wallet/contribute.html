@@ -3,208 +3,393 @@
 {% block title %}Contribute - {{ group.name }}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">
-                    <i class="bi bi-plus-circle"></i> Contribute to "{{ group.name }}"
-                </h5>
-                <span class="badge bg-light text-dark">Group Wallet</span>
-            </div>
-            <div class="card-body p-4">
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0 fw-bold">
+                        <i class="bi bi-wallet2 me-2"></i>Make Contribution
+                    </h4>
+                </div>
 
-                <!-- Current Status -->
-                <div class="alert alert-info mb-4">
-                    <div class="row text-center">
-                        <div class="col-md-4 mb-3 mb-md-0">
-                            <div class="p-2">
-                                <strong>Group Wallet Balance</strong><br>
-                                <span class="fs-4 text-primary">₹{{ "%.2f"|format(wallet.balance) }}</span>
+                <div class="card-body p-4">
+                    <!-- Monthly Limit Alert -->
+                    <div class="alert alert-warning border-0 mb-4">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-calendar-check fs-4 me-3"></i>
+                            <div>
+                                <h6 class="fw-bold mb-1">Monthly Contribution Limit: ₹20,000</h6>
+                                <p class="mb-0 small">
+                                    You've contributed <strong>₹{{ "%.2f"|format(monthly_status.monthly_total) }}</strong>
+                                    this month.
+                                    {% if monthly_status.remaining_limit > 0 %}
+                                        <span class="text-success">₹{{ "%.2f"|format(monthly_status.remaining_limit) }} remaining.</span>
+                                    {% else %}
+                                        <span class="text-danger">Limit reached!</span>
+                                    {% endif %}
+                                </p>
                             </div>
                         </div>
-                        <div class="col-md-4 mb-3 mb-md-0">
-                            <div class="p-2">
-                                <strong>Your Total Contribution</strong><br>
-                                <span class="fs-4 text-success">₹{{ "%.2f"|format(user_ledger.principal_contributed if user_ledger else 0) }}</span>
+                        <div class="progress mt-2" style="height: 6px;">
+                            <div class="progress-bar bg-warning"
+                                 role="progressbar"
+                                 style="width: {{ monthly_status.percentage_used }}%;"
+                                 aria-valuenow="{{ monthly_status.percentage_used }}"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Current Status -->
+                    <div class="alert alert-info border-0 mb-4 p-3">
+                        <div class="row text-center g-3">
+                            <div class="col-md-4">
+                                <div class="p-3 bg-white rounded shadow-sm">
+                                    <p class="text-muted mb-1 small fw-medium">Group Wallet Balance</p>
+                                    <h3 class="text-primary fw-bold mb-0">₹{{ "%.2f"|format(wallet.balance) }}</h3>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 bg-white rounded shadow-sm">
+                                    <p class="text-muted mb-1 small fw-medium">Your Contribution</p>
+                                    <h3 class="text-success fw-bold mb-0">₹{{ "%.2f"|format(user_ledger.principal_contributed if user_ledger else 0) }}</h3>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 bg-white rounded shadow-sm">
+                                    <p class="text-muted mb-1 small fw-medium">Active Members</p>
+                                    <h3 class="text-warning fw-bold mb-0">{{ group.get_active_member_count() }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contribution Form -->
+                    <form method="POST" action="{{ url_for('wallet.contribute', group_id=group.id) }}" id="contributionForm">
+                        <!-- Amount Input -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold fs-5">Contribution Amount *</label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text bg-success text-white fs-5">₹</span>
+                                <input type="number" name="amount" class="form-control fs-5 py-3"
+                                       placeholder="Enter amount"
+                                       min="1"
+                                       max="20000"
+                                       step="0.01"
+                                       required
+                                       oninput="validateContribution()"
+                                       data-monthly-total="{{ monthly_status.monthly_total }}"
+                                       data-monthly-limit="20000">
+                            </div>
+                            <div class="form-text mt-2">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Min: ₹1.00 | Max per transaction: ₹20,000 | Monthly limit: ₹20,000
+                            </div>
+                            <div class="invalid-feedback" id="amountError">
+                                Please enter a valid amount between ₹1.00 and ₹20,000
+                            </div>
+                        </div>
+
+                        <!-- Quick Amount Buttons -->
+                        <div class="mb-4">
+                            <p class="fw-medium mb-2">Quick Select:</p>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-outline-success quick-amount" data-amount="100">
+                                    ₹100
+                                </button>
+                                <button type="button" class="btn btn-outline-success quick-amount" data-amount="500">
+                                    ₹500
+                                </button>
+                                <button type="button" class="btn btn-outline-success quick-amount" data-amount="1000">
+                                    ₹1,000
+                                </button>
+                                <button type="button" class="btn btn-outline-success quick-amount" data-amount="5000">
+                                    ₹5,000
+                                </button>
+                                <button type="button" class="btn btn-outline-success quick-amount" data-amount="10000">
+                                    ₹10,000
+                                </button>
+                                <button type="button" class="btn btn-outline-success quick-amount" data-amount="20000">
+                                    ₹20,000
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Validation Messages -->
+                        <div id="validationMessages" class="mb-4">
+                            <!-- Will be filled by JavaScript -->
+                        </div>
+
+                        <!-- Why Contribute Section -->
+                        <div class="mb-4">
+                            <div class="card border-success-subtle bg-success-subtle">
+                                <div class="card-body">
+                                    <h6 class="card-title text-success fw-semibold mb-3">
+                                        <i class="bi bi-question-circle me-2"></i>Why Contribute?
+                                    </h6>
+                                    <ul class="list-unstyled mb-0">
+                                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Earn interest on loan repayments</li>
+                                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Interest proportional to your contribution</li>
+                                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Withdraw anytime with admin approval</li>
+                                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Higher voting power for loans</li>
+                                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Monthly limit protects from over-commitment</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Description (Optional) -->
+                        <div class="mb-4">
+                            <label class="form-label fw-medium">Description (Optional)</label>
+                            <input type="text" name="description" class="form-control py-2"
+                                   placeholder="e.g., Monthly contribution, Special contribution, etc.">
+                            <div class="form-text">
+                                This helps identify the purpose of your contribution
+                            </div>
+                        </div>
+
+                        <!-- Terms and Conditions -->
+                        <div class="mb-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="termsCheck" required>
+                                <label class="form-check-label" for="termsCheck">
+                                    I understand that:
+                                    <ul class="small text-muted mt-1 mb-0">
+                                        <li>Contributions will be used for group loans</li>
+                                        <li>Interest earned depends on loan repayments</li>
+                                        <li>Withdrawals require admin approval</li>
+                                        <li>This is a financial commitment to the group</li>
+                                        <li>Monthly contribution limit is ₹20,000 per user</li>
+                                        <li>Single transaction cannot exceed ₹20,000</li>
+                                    </ul>
+                                </label>
+                                <div class="invalid-feedback">
+                                    You must agree to the terms and conditions
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="d-flex gap-3">
+                            <button type="submit" class="btn btn-success btn-lg flex-grow-1 py-3 fw-semibold" id="submitBtn">
+                                <i class="bi bi-check-lg me-2"></i>Confirm Contribution
+                            </button>
+                            <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}"
+                               class="btn btn-outline-secondary btn-lg py-3">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Contribution History -->
+                {% if user_ledger and user_ledger.principal_contributed > 0 %}
+                <div class="card-footer bg-light border-top py-3">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="bi bi-clock-history me-2"></i>Your Contribution Summary
+                    </h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="bg-white rounded p-3 border">
+                                <p class="text-muted small mb-1">Total Contributed</p>
+                                <p class="fw-bold text-success fs-5 mb-0">₹{{ "%.2f"|format(user_ledger.principal_contributed) }}</p>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="p-2">
-                                <strong>Active Members</strong><br>
-                                <span class="fs-4 text-warning">{{ group.get_active_member_count() }}</span>
+                            <div class="bg-white rounded p-3 border">
+                                <p class="text-muted small mb-1">This Month's Contribution</p>
+                                <p class="fw-bold text-primary fs-5 mb-0">₹{{ "%.2f"|format(monthly_status.monthly_total) }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="bg-white rounded p-3 border">
+                                <p class="text-muted small mb-1">Interest Earned</p>
+                                <p class="fw-bold text-warning fs-5 mb-0">₹{{ "%.2f"|format(user_ledger.interest_earned) }}</p>
                             </div>
                         </div>
                     </div>
+                    {% if monthly_status.monthly_total > 0 %}
+                    <div class="mt-3 small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Monthly contributions reset on the 1st of every month
+                    </div>
+                    {% endif %}
                 </div>
-
-                <!-- Contribution Benefits -->
-                <div class="alert alert-light border mb-4">
-                    <h6 class="alert-heading"><i class="bi bi-info-circle"></i> Why Contribute?</h6>
-                    <ul class="mb-0">
-                        <li>Your contributions earn interest when group loans are repaid</li>
-                        <li>Interest is distributed proportionally based on your contribution amount</li>
-                        <li>You can withdraw your principal (and interest) anytime (subject to admin approval)</li>
-                        <li>Higher contributions mean higher voting power for loan approvals</li>
-                    </ul>
-                </div>
-
-                <form method="POST" action="{{ url_for('wallet.contribute', group_id=group.id) }}">
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Contribution Amount (₹) *</label>
-                        <div class="input-group input-group-lg">
-                            <span class="input-group-text bg-success text-white">₹</span>
-                            <input type="number" name="amount" class="form-control"
-                                   placeholder="Enter amount" min="1" step="0.01" required
-                                   oninput="updateRecommendation()">
-                        </div>
-                        <div class="form-text">
-                            Minimum contribution: ₹1.00
-                        </div>
-                    </div>
-
-                    <!-- Amount Recommendation -->
-                    <div id="amountRecommendation" class="alert alert-warning d-none">
-                        <i class="bi bi-lightbulb"></i>
-                        <span id="recommendationText"></span>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Description (Optional)</label>
-                        <input type="text" name="description" class="form-control"
-                               placeholder="e.g., Monthly contribution, Special contribution, etc.">
-                        <div class="form-text">
-                            This helps identify the purpose of your contribution
-                        </div>
-                    </div>
-
-                    <!-- Quick Amount Buttons -->
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Quick Select:</label>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <button type="button" class="btn btn-outline-success quick-amount" data-amount="100">
-                                ₹100
-                            </button>
-                            <button type="button" class="btn btn-outline-success quick-amount" data-amount="500">
-                                ₹500
-                            </button>
-                            <button type="button" class="btn btn-outline-success quick-amount" data-amount="1000">
-                                ₹1,000
-                            </button>
-                            <button type="button" class="btn btn-outline-success quick-amount" data-amount="5000">
-                                ₹5,000
-                            </button>
-                            <button type="button" class="btn btn-outline-success quick-amount" data-amount="10000">
-                                ₹10,000
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Terms and Conditions -->
-                    <div class="mb-4">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="termsCheck" required>
-                            <label class="form-check-label" for="termsCheck">
-                                I understand that:
-                                <ul class="small text-muted mt-1">
-                                    <li>Contributions will be used for group loans</li>
-                                    <li>Interest earned depends on loan repayments</li>
-                                    <li>Withdrawals require admin approval</li>
-                                    <li>This is a financial commitment to the group</li>
-                                </ul>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-success btn-lg flex-grow-1 py-3">
-                            <i class="bi bi-check-lg"></i> Confirm Contribution
-                        </button>
-                        <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}"
-                           class="btn btn-outline-secondary btn-lg py-3">
-                            Cancel
-                        </a>
-                    </div>
-                </form>
+                {% endif %}
             </div>
-
-            <!-- Recent Contributions (if any) -->
-            {% if user_ledger and user_ledger.principal_contributed > 0 %}
-            <div class="card-footer bg-light">
-                <h6 class="mb-2"><i class="bi bi-clock-history"></i> Your Contribution History</h6>
-                <div class="row small text-muted">
-                    <div class="col-md-4">
-                        <strong>Total Contributed:</strong> ₹{{ "%.2f"|format(user_ledger.principal_contributed) }}
-                    </div>
-                    <div class="col-md-4">
-                        <strong>Last Contribution:</strong>
-                        {% if user_ledger.last_contribution_at %}
-                            {{ user_ledger.last_contribution_at.strftime('%d %b %Y') }}
-                        {% else %}
-                            Never
-                        {% endif %}
-                    </div>
-                    <div class="col-md-4">
-                        <strong>Interest Earned:</strong> ₹{{ "%.2f"|format(user_ledger.interest_earned) }}
-                    </div>
-                </div>
-            </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
-{% block scripts %}
 <script>
+// Get monthly limit data from input attributes
+const MONTHLY_LIMIT = 20000;
+const monthlyTotal = parseFloat(document.querySelector('input[name="amount"]').dataset.monthlyTotal) || 0;
+
+// Quick amount buttons
 document.querySelectorAll('.quick-amount').forEach(btn => {
     btn.addEventListener('click', function() {
         const amount = this.dataset.amount;
         document.querySelector('input[name="amount"]').value = amount;
-        updateRecommendation();
+        validateContribution();
     });
 });
 
-function updateRecommendation() {
+function validateContribution() {
     const amountInput = document.querySelector('input[name="amount"]');
     const amount = parseFloat(amountInput.value) || 0;
-    const recommendationDiv = document.getElementById('amountRecommendation');
-    const recommendationText = document.getElementById('recommendationText');
+    const messagesDiv = document.getElementById('validationMessages');
+    const submitBtn = document.getElementById('submitBtn');
+
+    // Clear previous messages
+    messagesDiv.innerHTML = '';
 
     if (amount <= 0) {
-        recommendationDiv.classList.add('d-none');
         return;
     }
 
-    let recommendation = '';
+    // Create message container
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'alert';
 
-    // Based on amount, provide suggestions
-    if (amount < 100) {
-        recommendation = 'Small contributions are welcome! Every bit helps the group grow.';
-    } else if (amount < 1000) {
-        recommendation = 'Good contribution amount! This will help fund small loans.';
-    } else if (amount < 5000) {
-        recommendation = 'Great contribution! This amount can significantly help group members.';
-    } else {
-        recommendation = 'Excellent contribution! You\'ll earn substantial interest from loans.';
+    // Check single transaction limit
+    if (amount > 20000) {
+        messageDiv.className = 'alert alert-danger';
+        messageDiv.innerHTML = `
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Single transaction limit exceeded!</strong> Maximum per transaction is ₹20,000.
+        `;
+        submitBtn.disabled = true;
+        submitBtn.classList.add('disabled');
+    }
+    // Check monthly limit
+    else if (monthlyTotal + amount > MONTHLY_LIMIT) {
+        const remaining = MONTHLY_LIMIT - monthlyTotal;
+
+        if (remaining > 0) {
+            messageDiv.className = 'alert alert-warning';
+            messageDiv.innerHTML = `
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Monthly limit warning!</strong> You've contributed ₹${monthlyTotal.toLocaleString()} this month.
+                You can only contribute ₹${remaining.toLocaleString()} more to stay within the ₹20,000 monthly limit.
+            `;
+        } else {
+            messageDiv.className = 'alert alert-danger';
+            messageDiv.innerHTML = `
+                <i class="bi bi-x-circle-fill me-2"></i>
+                <strong>Monthly limit reached!</strong> You've already contributed ₹${monthlyTotal.toLocaleString()} this month.
+                Please wait until next month to contribute more.
+            `;
+            submitBtn.disabled = true;
+            submitBtn.classList.add('disabled');
+        }
+    }
+    // Within limits - show recommendation
+    else {
+        const remainingAfter = MONTHLY_LIMIT - (monthlyTotal + amount);
+
+        // Determine recommendation level
+        let recommendation = '';
+        let alertClass = 'alert-info';
+
+        if (amount < 1000) {
+            recommendation = 'Good start! Small contributions help build the group fund.';
+        } else if (amount < 5000) {
+            recommendation = 'Great contribution! This helps fund meaningful loans.';
+            alertClass = 'alert-success';
+        } else if (amount < 15000) {
+            recommendation = 'Excellent contribution! You\'ll earn substantial interest.';
+            alertClass = 'alert-success';
+        } else {
+            recommendation = 'Outstanding contribution! This significantly boosts the group\'s lending capacity.';
+            alertClass = 'alert-success';
+        }
+
+        messageDiv.className = `alert ${alertClass}`;
+        messageDiv.innerHTML = `
+            <i class="bi bi-check-circle me-2"></i>
+            <strong>${recommendation}</strong>
+            <div class="small mt-1">
+                After this contribution: ₹${(monthlyTotal + amount).toLocaleString()} / ₹20,000 monthly limit
+                (${remainingAfter > 0 ? `₹${remainingAfter.toLocaleString()} remaining` : 'limit reached'})
+            </div>
+        `;
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('disabled');
     }
 
-    // Check if this is a common amount
-    const commonAmounts = [100, 500, 1000, 2000, 5000, 10000];
-    if (commonAmounts.includes(amount)) {
-        recommendation += ' This is a common contribution amount in many groups.';
+    // Add message to container
+    if (amount > 0) {
+        messagesDiv.appendChild(messageDiv);
     }
 
-    recommendationText.textContent = recommendation;
-    recommendationDiv.classList.remove('d-none');
+    // Update progress bar in monthly limit section
+    updateProgressBar(monthlyTotal + amount);
 }
 
-// Initialize on page load
+function updateProgressBar(newTotal) {
+    const percentage = Math.min((newTotal / MONTHLY_LIMIT) * 100, 100);
+    const progressBar = document.querySelector('.progress-bar');
+    const progressContainer = document.querySelector('.progress');
+
+    if (progressBar && progressContainer) {
+        progressBar.style.width = `${percentage}%`;
+
+        // Change color based on percentage
+        if (percentage >= 90) {
+            progressBar.className = 'progress-bar bg-danger';
+        } else if (percentage >= 75) {
+            progressBar.className = 'progress-bar bg-warning';
+        } else {
+            progressBar.className = 'progress-bar bg-success';
+        }
+
+        // Update text
+        const progressText = document.querySelector('.alert-warning .small');
+        if (progressText) {
+            const remaining = MONTHLY_LIMIT - newTotal;
+            progressText.innerHTML = `
+                You've contributed <strong>₹${newTotal.toFixed(2)}</strong> this month.
+                ${remaining > 0 ?
+                    `<span class="text-success">₹${remaining.toFixed(2)} remaining.</span>` :
+                    `<span class="text-danger">Limit reached!</span>`
+                }
+            `;
+        }
+    }
+}
+
+// Form submission validation
+document.getElementById('contributionForm').addEventListener('submit', function(e) {
+    const amountInput = document.querySelector('input[name="amount"]');
+    const amount = parseFloat(amountInput.value) || 0;
+
+    // Client-side validation
+    if (amount > 20000) {
+        e.preventDefault();
+        alert('Single transaction cannot exceed ₹20,000!');
+        amountInput.focus();
+        return false;
+    }
+
+    if (monthlyTotal + amount > MONTHLY_LIMIT) {
+        e.preventDefault();
+        alert('This contribution would exceed your monthly limit of ₹20,000!');
+        amountInput.focus();
+        return false;
+    }
+
+    return true;
+});
+
+// Initialize validation on page load
 document.addEventListener('DOMContentLoaded', function() {
     const amountInput = document.querySelector('input[name="amount"]');
     if (amountInput.value) {
-        updateRecommendation();
+        validateContribution();
     }
 });
 </script>
-{% endblock %}
 {% endblock %}
