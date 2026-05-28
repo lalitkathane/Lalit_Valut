@@ -383,8 +383,6 @@ def interest_distributions(group_id):
 # Add these new routes to wallet.py
 
 # ============== WITHDRAW FROM WALLET ==============
-# ============== WITHDRAW FROM WALLET ==============
-# ============== WITHDRAW FROM WALLET ==============
 @wallet_bp.route('/groups/<int:group_id>/wallet/withdraw', methods=['GET', 'POST'])
 @login_required
 def withdraw_from_wallet(group_id):

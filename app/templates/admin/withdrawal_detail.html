@@ -1,230 +1,313 @@
 {% extends 'base.html' %}
 
-{% block title %}Review Withdrawal - Admin{% endblock %}
+{% block title %}Withdraw from Group Wallet{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">
-                    <i class="bi bi-cash-coin"></i> Review Withdrawal Request #{{ withdrawal.id }}
-                </h5>
-            </div>
-            <div class="card-body p-4">
-
-                <!-- Member Information -->
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <h6 class="text-muted">Member Details</h6>
-                        <div class="card bg-light mb-3">
-                            <div class="card-body">
-                                <h5>{{ withdrawal.user.name }}</h5>
-                                <p class="mb-1">
-                                    <i class="bi bi-envelope"></i> {{withdrawal.user.email }}
-                                </p>
-                                {% if withdrawal.user.phone %}
-                                <p class="mb-0">
-                                    <i class="bi bi-phone"></i> {{withdrawal.user.phone }}
-                                </p>
-                                {% endif %}
-                            </div>
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-warning bg-opacity-10 rounded-circle p-2 me-3">
+                            <i class="bi bi-cash text-warning"></i>
                         </div>
-
-                        <h6 class="text-muted mt-3">Request Details</h6>
-                        <ul class="list-group list-group-flush">
-                            <li class="list-group-item d-flex justify-content-between">
-                                <span>Request ID:</span>
-                                <span class="text-muted">#{{ withdrawal.id }}</span>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between">
-                                <span>Requested On:</span>
-                                <span>{{ withdrawal.created_at.strftime('%d %b %Y, %I:%M %p') }}</span>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between">
-                                <span>Type:</span>
-                                <span class="badge bg-{{ 'info' if withdrawal.withdrawal_type == 'principal_only' else 'warning' }}">
-                                    {{ withdrawal.withdrawal_type|replace('_', ' ')|title }}
-                                </span>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between">
-                                <span>Membership Action:</span>
-                                <span class="badge bg-{{ 'danger' if withdrawal.membership_action == 'deactivate' else 'success' }}">
-                                    {{ 'Will Leave Group' if withdrawal.membership_action == 'deactivate' else 'Stay in Group' }}
-                                </span>
-                            </li>
-                        </ul>
-                    </div>
-                    <div class="col-md-6">
-                        <!-- Amount Card -->
-                        <div class="card bg-light">
-                            <div class="card-body text-center">
-                                <h6 class="text-muted">Withdrawal Amount</h6>
-                                <h1 class="text-primary">₹{{ "%.2f"|format(withdrawal.total_amount) }}</h1>
-
-                                <div class="row mt-3">
-                                    <div class="col-6">
-                                        <small class="text-muted">Principal</small>
-                                        <h4 class="mb-0">₹{{ "%.2f"|format(withdrawal.principal_amount) }}</h4>
-                                    </div>
-                                    <div class="col-6">
-                                        <small class="text-muted">Interest</small>
-                                        <h4 class="mb-0">₹{{ "%.2f"|format(withdrawal.interest_amount) }}</h4>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Member Balance Summary -->
-                        {% if ledger %}
-                        <div class="card mt-3">
-                            <div class="card-header bg-info text-white">
-                                <h6 class="mb-0"><i class="bi bi-wallet2"></i> Member's Current Balance</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="row text-center">
-                                    <div class="col-6">
-                                        <small class="text-muted">Net Principal</small>
-                                        <p class="mb-0">₹{{ "%.2f"|format(ledger.net_principal) }}</p>
-                                    </div>
-                                    <div class="col-6">
-                                        <small class="text-muted">Net Interest</small>
-                                        <p class="mb-0">₹{{ "%.2f"|format(ledger.net_interest) }}</p>
-                                    </div>
-                                </div>
-                                <hr class="my-2">
-                                <div class="text-center">
-                                    <small class="text-muted">Total Balance</small>
-                                    <h4 class="text-success mb-0">₹{{ "%.2f"|format(ledger.total_balance) }}</h4>
-                                </div>
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <!-- Group Wallet Status -->
-                <div class="card bg-light mb-4">
-                    <div class="card-body">
-                        <h6 class="text-muted mb-3">Group Wallet Status</h6>
-                        <div class="row text-center">
-                            <div class="col-4">
-                                <small class="text-muted">Current Balance</small>
-                                <p class="mb-0">₹{{ "%.2f"|format(group.wallet.balance if group.wallet else 0) }}</p>
-                            </div>
-                            <div class="col-4">
-                                <small class="text-muted">After Approval</small>
-                                <p class="mb-0 {{ 'text-danger' if (group.wallet.balance if group.wallet else 0) - withdrawal.total_amount < 0 else 'text-primary' }}">
-                                    ₹{{ "%.2f"|format((group.wallet.balance if group.wallet else 0) - withdrawal.total_amount) }}
-                                </p>
-                            </div>
-                            <div class="col-4">
-                                <small class="text-muted">Status</small>
-                                <p class="mb-0">
-                                    {% if group.wallet and group.wallet.balance >= withdrawal.total_amount %}
-                                    <span class="badge bg-success">Sufficient Funds</span>
-                                    {% else %}
-                                    <span class="badge bg-danger">Insufficient Funds</span>
-                                    {% endif %}
-                                </p>
-                            </div>
+                        <div>
+                            <h5 class="mb-0 fw-bold">Withdraw Funds</h5>
+                            <small class="text-muted">From {{ group.name }}</small>
                         </div>
                     </div>
                 </div>
 
-                <!-- Validation Checks -->
-                <div class="alert alert-info">
-                    <h6><i class="bi bi-info-circle"></i> Validation Checks</h6>
-                    <ul class="mb-0">
-                        {% if group.wallet and group.wallet.balance >= withdrawal.total_amount %}
-                        <li>✓ Group has sufficient balance (₹{{ "%.2f"|format(group.wallet.balance if group.wallet else 0) }} ≥ ₹{{ "%.2f"|format(withdrawal.total_amount) }})</li>
-                        {% else %}
-                        <li class="text-danger">✗ Insufficient group balance (₹{{ "%.2f"|format(group.wallet.balance if group.wallet else 0) }} < ₹{{ "%.2f"|format(withdrawal.total_amount) }})</li>
+                <div class="card-body p-4">
+                    <!-- Flash Messages -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
                         {% endif %}
+                    {% endwith %}
 
-                        {% if ledger and withdrawal.principal_amount <= ledger.net_principal %}
-                        <li>✓ Member has sufficient principal balance (₹{{ "%.2f"|format(ledger.net_principal) }} ≥ ₹{{ "%.2f"|format(withdrawal.principal_amount) }})</li>
-                        {% else %}
-                        <li class="text-danger">✗ Insufficient principal balance</li>
-                        {% endif %}
+                    <!-- Wallet Summary -->
+                    <div class="alert alert-info mb-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1 fw-bold">Your Balance</h6>
+                                <div class="d-flex align-items-baseline">
+                                    <h3 class="fw-bold mb-0">₹{{ "%.2f"|format(member_balance.total_balance) }}</h3>
+                                    <small class="text-muted ms-2">
+                                        (Principal: ₹{{ "%.2f"|format(member_balance.net_principal) }},
+                                        Interest: ₹{{ "%.2f"|format(member_balance.net_interest) }})
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                        {% if ledger and withdrawal.interest_amount <= ledger.net_interest %}
-                        <li>✓ Member has sufficient interest balance (₹{{ "%.2f"|format(ledger.net_interest) }} ≥ ₹{{ "%.2f"|format(withdrawal.interest_amount) }})</li>
-                        {% elif withdrawal.interest_amount > 0 %}
-                        <li class="text-danger">✗ Insufficient interest balance</li>
-                        {% endif %}
-                    </ul>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        {% if group.wallet and group.wallet.balance >= withdrawal.total_amount and
-                              ledger and withdrawal.principal_amount <= ledger.net_principal and
-                              (withdrawal.interest_amount == 0 or withdrawal.interest_amount <= ledger.net_interest) %}
-                        <form action="{{ url_for('admin.approve_withdrawal_route', withdrawal_id=withdrawal.id) }}"
-                              method="POST">
-                            <button type="submit" class="btn btn-success btn-lg w-100"
-                                    onclick="return confirm('Approve withdrawal of ₹{{ withdrawal.total_amount }}? This action cannot be undone.')">
-                                <i class="bi bi-check-lg"></i> Approve Withdrawal
+                    <!-- Loan Status Check -->
+                    {% if member_balance.get('has_active_loans', false) or has_active_loans %}
+                    <div class="alert alert-danger mb-4">
+                        <h6 class="fw-bold mb-1"><i class="bi bi-exclamation-triangle"></i> Withdrawal Restricted</h6>
+                        <p class="mb-0">
+                            {% if member_balance.get('message') %}
+                                {{ member_balance.message }}
+                            {% else %}
+                                You cannot withdraw funds while you have active or pending loans.
+                            {% endif %}
+                            <br><small class="text-muted">
+                                Please repay or cancel your loans before requesting a withdrawal.
+                            </small>
+                        </p>
+                        {% if active_loans and active_loans|length > 0 %}
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#loanDetails">
+                                View Loan Details
                             </button>
-                        </form>
-                        {% else %}
-                        <button type="button" class="btn btn-success btn-lg w-100" disabled>
-                            <i class="bi bi-check-lg"></i> Approve Withdrawal
-                        </button>
-                        <small class="text-danger d-block mt-1">Cannot approve due to validation failures</small>
+                            <div class="collapse mt-2" id="loanDetails">
+                                <div class="card card-body">
+                                    <h6 class="fw-bold mb-2">Your Active Loans:</h6>
+                                    {% for loan in active_loans %}
+                                    <div class="border-bottom pb-2 mb-2">
+                                        <div class="d-flex justify-content-between">
+                                            <span class="fw-medium">Loan #{{ loan.id }}</span>
+                                            <span class="badge bg-{{ 'warning' if loan.status == 'pending' else 'info' if loan.status == 'approved' else 'primary' }}">
+                                                {{ loan.status|title }}
+                                            </span>
+                                        </div>
+                                        <div class="small text-muted">
+                                            Amount: ₹{{ "%.2f"|format(loan.amount) }}
+                                            {% if loan.status == 'disbursed' %}
+                                            • Remaining: ₹{{ "%.2f"|format(loan.get_remaining_amount()) }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
                         {% endif %}
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <button type="button" class="btn btn-danger btn-lg w-100"
-                                data-bs-toggle="modal" data-bs-target="#rejectModal">
-                            <i class="bi bi-x-lg"></i> Reject Withdrawal
-                        </button>
-                    </div>
-                </div>
+                    {% endif %}
 
-                <div class="mt-3">
-                    <a href="{{ url_for('admin.pending_withdrawals', group_id=group.id) }}"
-                       class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-left"></i> Back to Pending List
-                    </a>
-                    <a href="{{ url_for('admin.admin_dashboard', group_id=group.id) }}"
-                       class="btn btn-outline-primary ms-2">
-                        <i class="bi bi-shield-check"></i> Admin Dashboard
-                    </a>
+                    <!-- Withdrawal Form -->
+                    <form method="POST" action="{{ url_for('wallet.withdraw_from_wallet', group_id=group.id) }}"
+                          id="withdrawalForm">
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">Withdrawal Type</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="withdrawal_type" id="principal_only"
+                                       value="principal_only"
+                                       {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% else %}checked{% endif %}>
+                                <label class="btn btn-outline-primary {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% endif %}" for="principal_only">
+                                    <i class="bi bi-cash me-2"></i>Principal Only
+                                </label>
+
+                                <input type="radio" class="btn-check" name="withdrawal_type" id="with_interest"
+                                       value="with_interest"
+                                       {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% endif %}>
+                                <label class="btn btn-outline-success {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% endif %}" for="with_interest">
+                                    <i class="bi bi-cash-stack me-2"></i>Principal + Interest
+                                </label>
+                            </div>
+                            <small class="text-muted mt-1 d-block">
+                                <span id="principal_only_desc">Withdraw only your contributed principal amount</span>
+                                <span id="with_interest_desc" style="display: none;">Withdraw both principal and earned interest</span>
+                                {% if member_balance.get('has_active_loans', false) or has_active_loans %}
+                                <span class="text-danger d-block mt-1">
+                                    <i class="bi bi-exclamation-circle"></i> Form disabled due to active loans
+                                </span>
+                                {% endif %}
+                            </small>
+                        </div>
+
+                        <!-- Amount Input -->
+                        <div class="mb-4">
+                            <label for="amount" class="form-label fw-semibold">Amount to Withdraw (₹)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">₹</span>
+                                <input type="number" class="form-control" id="amount" name="amount"
+                                       step="0.01" min="0" required
+                                       placeholder="Enter amount"
+                                       {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% endif %}>
+                            </div>
+                            <div class="form-text">
+                                <div class="d-flex justify-content-between small">
+                                    <span>Available principal: <strong>₹{{ "%.2f"|format(member_balance.net_principal) }}</strong></span>
+                                    <span>Available interest: <strong>₹{{ "%.2f"|format(member_balance.net_interest) }}</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Membership Action -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">After Withdrawal</label>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="membership_action"
+                                       id="keep_active" value="keep_active"
+                                       {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% else %}checked{% endif %}>
+                                <label class="form-check-label {% if member_balance.get('has_active_loans', false) or has_active_loans %}text-muted{% endif %}" for="keep_active">
+                                    <strong>Keep membership active</strong>
+                                    <small class="d-block text-muted">Remain in the group and continue participating</small>
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="membership_action"
+                                       id="deactivate" value="deactivate"
+                                       {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% endif %}>
+                                <label class="form-check-label {% if member_balance.get('has_active_loans', false) or has_active_loans %}text-muted{% endif %}" for="deactivate">
+                                    <strong>Leave the group</strong>
+                                    <small class="d-block text-muted">Withdraw all funds and deactivate membership</small>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Reason (Optional) -->
+                        <div class="mb-4">
+                            <label for="reason" class="form-label fw-semibold">Reason for Withdrawal (Optional)</label>
+                            <textarea class="form-control" id="reason" name="reason"
+                                      rows="3" placeholder="Enter reason for withdrawal..."
+                                      {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% endif %}></textarea>
+                        </div>
+
+                        <!-- Terms Agreement -->
+                        <div class="mb-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="terms" required
+                                       {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% endif %}>
+                                <label class="form-check-label {% if member_balance.get('has_active_loans', false) or has_active_loans %}text-muted{% endif %}" for="terms">
+                                    I understand that:
+                                    <ul class="small text-muted mt-2 mb-0">
+                                        <li>Withdrawals require admin approval</li>
+                                        <li>Funds will be available after approval</li>
+                                        <li>If I choose to leave the group, I'll lose access to all group data</li>
+                                        <li>This action cannot be undone</li>
+                                    </ul>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="d-flex justify-content-between pt-2">
+                            <a href="{{ url_for('wallet.view_wallet', group_id=group.id) }}"
+                               class="btn btn-outline-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-warning"
+                                    id="submitBtn"
+                                    {% if member_balance.get('has_active_loans', false) or has_active_loans %}disabled{% endif %}>
+                                <i class="bi bi-cash me-2"></i>
+                                {% if member_balance.get('has_active_loans', false) or has_active_loans %}
+                                Withdrawal Restricted
+                                {% else %}
+                                Submit Withdrawal Request
+                                {% endif %}
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Reject Modal -->
-<div class="modal fade" id="rejectModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form action="{{ url_for('admin.reject_withdrawal_route', withdrawal_id=withdrawal.id) }}" method="POST">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title">Reject Withdrawal Request</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to reject this withdrawal request of
-                       <strong>₹{{ "%.2f"|format(withdrawal.total_amount) }}</strong>?</p>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if form is disabled due to active loans
+    const hasActiveLoans = {% if member_balance.get('has_active_loans', false) or has_active_loans %}true{% else %}false{% endif %};
 
-                    <div class="mb-3">
-                        <label class="form-label">Reason for Rejection *</label>
-                        <textarea name="reason" class="form-control" rows="4" required
-                                  placeholder="Please provide a clear reason for rejecting this withdrawal request..."></textarea>
-                        <small class="text-muted">This reason will be shown to the member.</small>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">Reject Request</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+    if (hasActiveLoans) {
+        document.getElementById('withdrawalForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('You cannot withdraw while you have active or pending loans. Please repay or cancel your loans first.');
+            return false;
+        });
+        return; // Skip other JavaScript if form is disabled
+    }
+
+    // Update description based on withdrawal type
+    const principalOnlyRadio = document.getElementById('principal_only');
+    const withInterestRadio = document.getElementById('with_interest');
+    const principalDesc = document.getElementById('principal_only_desc');
+    const interestDesc = document.getElementById('with_interest_desc');
+
+    function updateDescription() {
+        if (principalOnlyRadio.checked) {
+            principalDesc.style.display = 'block';
+            interestDesc.style.display = 'none';
+            // Set max amount to available principal
+            document.getElementById('amount').max = {{ member_balance.net_principal|tojson }};
+        } else {
+            principalDesc.style.display = 'none';
+            interestDesc.style.display = 'block';
+            // Set max amount to total balance
+            document.getElementById('amount').max = {{ member_balance.total_balance|tojson }};
+        }
+    }
+
+    principalOnlyRadio.addEventListener('change', updateDescription);
+    withInterestRadio.addEventListener('change', updateDescription);
+    updateDescription();
+
+    // Validate amount input
+    const amountInput = document.getElementById('amount');
+    amountInput.addEventListener('input', function() {
+        const maxAmount = this.max ? parseFloat(this.max) : 0;
+        const value = parseFloat(this.value) || 0;
+
+        if (value > maxAmount) {
+            this.setCustomValidity(`Amount cannot exceed ₹${maxAmount.toFixed(2)}`);
+        } else if (value <= 0) {
+            this.setCustomValidity('Amount must be greater than 0');
+        } else {
+            this.setCustomValidity('');
+        }
+    });
+
+    // Form submission confirmation
+    const form = document.getElementById('withdrawalForm');
+    form.addEventListener('submit', function(e) {
+        const amount = parseFloat(amountInput.value) || 0;
+        const withdrawalType = document.querySelector('input[name="withdrawal_type"]:checked').value;
+        const membershipAction = document.querySelector('input[name="membership_action"]:checked').value;
+
+        let confirmMessage = 'Are you sure you want to submit a withdrawal request for ₹' + amount.toFixed(2) + '?';
+
+        if (withdrawalType === 'principal_only') {
+            confirmMessage += '\n\nType: Principal Only';
+        } else {
+            confirmMessage += '\n\nType: Principal + Interest';
+        }
+
+        if (membershipAction === 'deactivate') {
+            confirmMessage += '\nAction: Leave the group after withdrawal';
+            confirmMessage += '\n\n⚠️ WARNING: You will lose access to all group data!';
+        } else {
+            confirmMessage += '\nAction: Keep membership active';
+        }
+
+        if (!confirm(confirmMessage)) {
+            e.preventDefault();
+        }
+    });
+});
+</script>
+
+<style>
+.btn-check:checked + .btn-outline-primary {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.btn-check:checked + .btn-outline-success {
+    background-color: #198754;
+    color: white;
+}
+
+.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+</style>
 {% endblock %}

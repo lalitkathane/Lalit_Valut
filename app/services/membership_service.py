@@ -222,16 +222,17 @@ def get_member_liabilities(user_id, group_id):
 
     return liabilities
 
-# -----------------
-
 # ============================================================
-# LEAVE GROUP (CORRECTED)
+# LEAVE GROUP (CORRECTED WITH IMMEDIATE BALANCE UPDATE)
 # ============================================================
 
 def leave_group(group_id, user_id, reason=None):
     """
     Member leaves group.
     Archives their ledger when they leave.
+
+    Special case: If user is the only member AND wallet balance is zero,
+    allow leaving without withdrawal check (group will be deleted).
     """
     try:
         # Check authorization (includes liability check)
@@ -249,7 +250,7 @@ def leave_group(group_id, user_id, reason=None):
         if not membership:
             raise MembershipError("You are not a member of this group")
 
-        # Get wallet and ledger
+        # Get wallet and check balance
         wallet = GroupWallet.query.filter_by(group_id=group_id).first()
         if not wallet:
             raise MembershipError("Group wallet not found")
@@ -261,14 +262,27 @@ def leave_group(group_id, user_id, reason=None):
             is_active=True
         ).first()
 
-        # Check if member has contributions to withdraw
-        if ledger and ledger.net_principal > 0:
-            raise MembershipError(
-                f"You must withdraw your contributions (₹{ledger.net_principal:.2f}) before leaving the group. "
-                f"Please create a withdrawal request first."
-            )
+        # Check if this is the last member leaving
+        active_members_count = GroupMember.query.filter_by(
+            group_id=group_id,
+            is_active=True
+        ).count()
 
-        # ARCHIVE THE LEDGER
+        # Special case: If this is the only member AND wallet balance is zero
+        # Allow leaving without withdrawal check
+        if active_members_count == 1 and wallet.balance == 0:
+            # Skip withdrawal check for this special case
+            # The group will be deleted by the route handler
+            pass
+        else:
+            # Normal case: Check if member has contributions to withdraw
+            if ledger and ledger.net_principal > 0:
+                raise MembershipError(
+                    f"You must withdraw your contributions (₹{ledger.net_principal:.2f}) before leaving the group. "
+                    f"Please create a withdrawal request first."
+                )
+
+        # ARCHIVE THE LEDGER (if exists)
         if ledger:
             ledger.archive()  # Set is_active=False
 
@@ -280,6 +294,9 @@ def leave_group(group_id, user_id, reason=None):
         if summary:
             summary.is_dirty = True
 
+        # Update wallet timestamp
+        wallet.last_recalculated_at = datetime.utcnow()
+
         db.session.commit()
         return True
 
@@ -290,12 +307,8 @@ def leave_group(group_id, user_id, reason=None):
         db.session.rollback()
         raise MembershipError(f"Failed to leave group: {str(e)}")
 
-
 # ============================================================
-# REMOVE MEMBER (CORRECTED)
-# ============================================================
-# ============================================================
-# REMOVE MEMBER (CORRECTED WITH LOAN CHECKS)
+# REMOVE MEMBER (WITH IMMEDIATE BALANCE UPDATE)
 # ============================================================
 
 def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
@@ -446,6 +459,10 @@ def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
             if ledger:
                 ledger.archive()
 
+            # 5. IMMEDIATELY UPDATE WALLET BALANCE
+            wallet.balance -= principal_amount
+            wallet.total_withdrawn += principal_amount
+
             flash_message = f"Member removed and withdrawal of ₹{principal_amount:.2f} processed."
         else:
             # Just deactivate membership if no balance
@@ -462,8 +479,8 @@ def remove_member(group_id, user_id, admin_user_id, reason="Removed by admin"):
         if summary:
             summary.is_dirty = True
 
-        # Mark group wallet as dirty
-        wallet.mark_dirty()
+        # Update wallet's last recalculated timestamp (not dirty since we updated directly)
+        wallet.last_recalculated_at = datetime.utcnow()
 
         # Commit all changes
         db.session.commit()

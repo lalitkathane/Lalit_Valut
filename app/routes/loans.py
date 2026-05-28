@@ -27,6 +27,8 @@ loans_bp = Blueprint('loans', __name__)
 
 
 # ============== CREATE LOAN REQUEST ==============
+# Update the create_loan function in loans_new.py:
+
 @loans_bp.route('/groups/<int:group_id>/loans/create', methods=['GET', 'POST'])
 @login_required
 def create_loan(group_id):
@@ -41,6 +43,13 @@ def create_loan(group_id):
         try:
             amount = float(request.form.get('amount', 0))
             reason = request.form.get('reason', '').strip()
+            loan_duration = request.form.get('loan_duration', group.default_loan_duration_months, type=int)
+
+            # VALIDATE MINIMUM EMI DURATION
+            if loan_duration < group.min_emi_duration_months:
+                flash(f'Loan duration must be at least {group.min_emi_duration_months} months (group policy)!',
+                      'danger')
+                return render_template('loans/create.html', group=group)
 
             # Validate positive whole number
             if amount <= 0:
@@ -77,6 +86,8 @@ def create_loan(group_id):
 
 
 # ============== VIEW LOAN DETAILS ==============
+# Update the view_loan function in loans_new.py:
+
 @loans_bp.route('/loans/<int:loan_id>')
 @login_required
 def view_loan(loan_id):
@@ -120,6 +131,22 @@ def view_loan(loan_id):
         ).all()
 
     today = datetime.utcnow().date()
+
+    # NEW: Check if borrower has ANY repayment (pending OR approved) this month
+    has_repayment_this_month = False
+    if not is_admin and current_user.id == loan.requested_by:
+        current_month = datetime.utcnow().month
+        current_year = datetime.utcnow().year
+
+        # Check for ANY repayment this month (pending OR approved)
+        repayment_this_month = LoanRepayment.query.filter(
+            LoanRepayment.loan_id == loan_id,
+            LoanRepayment.paid_by == current_user.id,
+            db.extract('month', LoanRepayment.submitted_at) == current_month,
+            db.extract('year', LoanRepayment.submitted_at) == current_year
+        ).first()
+
+        has_repayment_this_month = repayment_this_month is not None
 
     # Calculate vote progress percentage
     vote_progress = 0
@@ -167,9 +194,9 @@ def view_loan(loan_id):
         vote_progress=vote_progress,
         repay_progress=repay_progress,
         days_left=days_left,
-        now=datetime.utcnow()
+        now=datetime.utcnow(),
+        has_repayment_this_month=has_repayment_this_month  # NEW: Pass this to template
     )
-
 # ============== FINAL ADMIN APPROVAL ==============
 @loans_bp.route('/loans/<int:loan_id>/final-approve', methods=['POST'])
 @login_required
@@ -320,15 +347,32 @@ def my_loans():
 # ============== SUBMIT REPAYMENT ==============
 # In loans.py, update the repay_loan function to hide when fully repaid:
 
+# Update the repay_loan function in loans_new.py:
+
 @loans_bp.route('/loans/<int:loan_id>/repay', methods=['GET', 'POST'])
 @login_required
 def repay_loan(loan_id):
-    """Submit a repayment for a loan"""
+    """Submit a repayment for a loan - WITH EMI RESTRICTIONS"""
     loan = LoanRequest.query.get_or_404(loan_id)
 
     # Check if loan is fully repaid
     if loan.is_fully_repaid():
         flash('This loan has already been fully repaid!', 'info')
+        return redirect(url_for('loans.view_loan', loan_id=loan_id))
+
+    # NEW: Check if user has already submitted ANY repayment for this month
+    current_month = datetime.utcnow().month
+    current_year = datetime.utcnow().year
+
+    repayment_this_month = LoanRepayment.query.filter(
+        LoanRepayment.loan_id == loan_id,
+        LoanRepayment.paid_by == current_user.id,
+        db.extract('month', LoanRepayment.submitted_at) == current_month,
+        db.extract('year', LoanRepayment.submitted_at) == current_year
+    ).first()
+
+    if repayment_this_month:
+        flash('You have already submitted a repayment for this month! You can only make one payment per month.', 'warning')
         return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
     group = loan.group
@@ -354,6 +398,22 @@ def repay_loan(loan_id):
 
     remaining_amount = loan.get_remaining_amount()
 
+    # NEW: Calculate paid EMIs and remaining EMIs
+    paid_emis = 0
+    remaining_emis = 0
+    can_make_full_payment = False
+
+    if loan.loan_duration_months and loan.repayment_type == 'emi':
+        paid_emis = EMISchedule.query.filter_by(
+            loan_id=loan_id,
+            is_paid=True
+        ).count()
+
+        remaining_emis = loan.loan_duration_months - paid_emis
+
+        # FIXED: Can make full payment if paid EMIs >= minimum EMI duration
+        can_make_full_payment = paid_emis >= group.min_emi_duration_months
+
     if request.method == 'POST':
         try:
             amount_str = request.form.get('amount', '0').strip()
@@ -365,23 +425,61 @@ def repay_loan(loan_id):
                 flash('Please enter a valid amount!', 'danger')
                 return render_template('loans/repay.html',
                                        loan=loan, group=group, remaining_amount=remaining_amount,
-                                       emi_schedule=emi_schedule, next_emi=next_emi)
+                                       emi_schedule=emi_schedule, next_emi=next_emi,
+                                       paid_emis=paid_emis, remaining_emis=remaining_emis,
+                                       can_make_full_payment=can_make_full_payment)
 
             # Validate positive amount
             if amount <= 0:
                 flash('Please enter a valid amount greater than zero!', 'danger')
                 return render_template('loans/repay.html',
                                        loan=loan, group=group, remaining_amount=remaining_amount,
-                                       emi_schedule=emi_schedule, next_emi=next_emi)
+                                       emi_schedule=emi_schedule, next_emi=next_emi,
+                                       paid_emis=paid_emis, remaining_emis=remaining_emis,
+                                       can_make_full_payment=can_make_full_payment)
 
             # Check if amount is a whole number
             if not amount.is_integer():
                 flash('Repayment amount must be a whole number (no decimals allowed)!', 'danger')
                 return render_template('loans/repay.html',
                                        loan=loan, group=group, remaining_amount=remaining_amount,
-                                       emi_schedule=emi_schedule, next_emi=next_emi)
+                                       emi_schedule=emi_schedule, next_emi=next_emi,
+                                       paid_emis=paid_emis, remaining_emis=remaining_emis,
+                                       can_make_full_payment=can_make_full_payment)
 
             amount = int(amount)
+
+            # NEW: PREVENT FULL PAYMENT IF MINIMUM EMI DURATION NOT MET
+            if loan.loan_duration_months and loan.repayment_type == 'emi':
+
+                # Check if trying to pay more than next EMI
+                if amount > loan.emi_amount:
+                    # Check if trying to pay full amount before minimum EMI duration
+                    if amount >= remaining_amount:
+                        if can_make_full_payment:
+                            # Allow full payment
+                            pass
+                        else:
+                            flash(f'You must complete at least {group.min_emi_duration_months} EMIs before making full payment. You have paid {paid_emis} EMIs so far.', 'danger')
+                            return render_template('loans/repay.html',
+                                                   loan=loan, group=group, remaining_amount=remaining_amount,
+                                                   emi_schedule=emi_schedule, next_emi=next_emi,
+                                                   paid_emis=paid_emis, remaining_emis=remaining_emis,
+                                                   can_make_full_payment=can_make_full_payment)
+                    else:
+                        flash(f'You can only pay one EMI at a time (₹{loan.emi_amount:,}). Minimum EMI duration is {group.min_emi_duration_months} months.', 'danger')
+                        return render_template('loans/repay.html',
+                                               loan=loan, group=group, remaining_amount=remaining_amount,
+                                               emi_schedule=emi_schedule, next_emi=next_emi,
+                                               paid_emis=paid_emis, remaining_emis=remaining_emis,
+                                               can_make_full_payment=can_make_full_payment)
+                elif amount < loan.emi_amount:
+                    flash(f'Minimum payment is one EMI (₹{loan.emi_amount:,})', 'danger')
+                    return render_template('loans/repay.html',
+                                           loan=loan, group=group, remaining_amount=remaining_amount,
+                                           emi_schedule=emi_schedule, next_emi=next_emi,
+                                           paid_emis=paid_emis, remaining_emis=remaining_emis,
+                                           can_make_full_payment=can_make_full_payment)
 
             description = request.form.get('description', '').strip()
             emi_id = request.form.get('emi_id', type=int)
@@ -413,9 +511,11 @@ def repay_loan(loan_id):
         group=group,
         remaining_amount=remaining_amount,
         emi_schedule=emi_schedule,
-        next_emi=next_emi
+        next_emi=next_emi,
+        paid_emis=paid_emis,
+        remaining_emis=remaining_emis,
+        can_make_full_payment=can_make_full_payment
     )
-
 
 # ============== VIEW EMI SCHEDULE ==============
 @loans_bp.route('/loans/<int:loan_id>/emi-schedule')
@@ -511,15 +611,15 @@ def close_loan(loan_id):
     return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
 
-# ============== EDIT LOAN (ADMIN ONLY) ==============
-# In loans.py, update the edit_loan function:
 
+# ============== EDIT LOAN (ADMIN ONLY) ==============
 # ============== EDIT LOAN (ADMIN ONLY) ==============
 @loans_bp.route('/loans/<int:loan_id>/edit', methods=['POST'])
 @login_required
 def edit_loan(loan_id):
     """Admin: Edit loan terms with validation and EMI regeneration"""
     loan = LoanRequest.query.get_or_404(loan_id)
+    group = loan.group  # Get the group for policy validation
 
     if not is_group_admin(current_user.id, loan.group_id):
         flash('Only group admin can edit loans!', 'danger')
@@ -578,6 +678,28 @@ def edit_loan(loan_id):
                 flash('Invalid amount format', 'danger')
                 return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
+        # Update loan duration
+        if loan_duration:
+            try:
+                new_duration = int(loan_duration)
+                if new_duration <= 0:
+                    flash('Loan duration must be greater than 0', 'danger')
+                    return redirect(url_for('loans.view_loan', loan_id=loan_id))
+
+                # VALIDATE MINIMUM DURATION AGAINST GROUP POLICY
+                if new_duration < group.min_emi_duration_months:
+                    flash(f'Loan duration must be at least {group.min_emi_duration_months} months (group policy)!',
+                          'danger')
+                    return redirect(url_for('loans.view_loan', loan_id=loan_id))
+
+                if loan.loan_duration_months is None or new_duration != loan.loan_duration_months:
+                    changes.append(f"Duration: {loan.loan_duration_months or 'N/A'} months → {new_duration} months")
+                    loan.loan_duration_months = new_duration
+                    financial_terms_changed = True
+            except ValueError:
+                flash('Invalid loan duration format', 'danger')
+                return redirect(url_for('loans.view_loan', loan_id=loan_id))
+
         # Update interest rate
         if interest_rate:
             try:
@@ -592,22 +714,6 @@ def edit_loan(loan_id):
                     financial_terms_changed = True
             except ValueError:
                 flash('Invalid interest rate format', 'danger')
-                return redirect(url_for('loans.view_loan', loan_id=loan_id))
-
-        # Update loan duration
-        if loan_duration:
-            try:
-                new_duration = int(loan_duration)
-                if new_duration <= 0:
-                    flash('Loan duration must be greater than 0', 'danger')
-                    return redirect(url_for('loans.view_loan', loan_id=loan_id))
-
-                if loan.loan_duration_months is None or new_duration != loan.loan_duration_months:
-                    changes.append(f"Duration: {loan.loan_duration_months or 'N/A'} months → {new_duration} months")
-                    loan.loan_duration_months = new_duration
-                    financial_terms_changed = True
-            except ValueError:
-                flash('Invalid loan duration format', 'danger')
                 return redirect(url_for('loans.view_loan', loan_id=loan_id))
 
         # Update repayment type
@@ -731,8 +837,6 @@ def edit_loan(loan_id):
     # Redirect with cache busting parameter
     import time
     return redirect(url_for('loans.view_loan', loan_id=loan_id, _t=int(time.time())))
-
-
 # ============== LOAN AUDIT LOGS (ADMIN ONLY) ==============
 @loans_bp.route('/loans/<int:loan_id>/audit-logs')
 @login_required

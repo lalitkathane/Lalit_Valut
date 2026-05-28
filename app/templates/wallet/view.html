@@ -128,12 +128,20 @@
                     <span class="fw-medium">{{ withdrawal.user.name }}</span>
                     <span class="text-muted">• ₹{{ "%.2f"|format(withdrawal.total_amount) }}</span>
                 </div>
+                <!-- FIXED: Changed from wallet.pending_withdrawals to admin.withdrawal_detail -->
                 <a href="{{ url_for('admin.withdrawal_detail', withdrawal_id=withdrawal.id) }}"
                    class="btn btn-sm btn-outline-primary">
                     Review
                 </a>
             </div>
             {% endfor %}
+            <!-- Add link to see all pending withdrawals in admin panel -->
+            <div class="mt-3">
+                <a href="{{ url_for('admin.pending_withdrawals', group_id=group.id) }}"
+                   class="btn btn-sm btn-outline-warning">
+                    <i class="bi bi-list"></i> View All Pending Withdrawals
+                </a>
+            </div>
         </div>
         {% endif %}
     </div>
@@ -286,6 +294,10 @@
             <i class="bi bi-calculator"></i> Recalculate Balance
         </button>
     </form>
+    <!-- Add link to admin withdrawal management -->
+    <a href="{{ url_for('admin.pending_withdrawals', group_id=group.id) }}" class="btn btn-outline-info ms-2">
+        <i class="bi bi-cash-coin"></i> Manage Withdrawals
+    </a>
 </div>
 {% endif %}
 

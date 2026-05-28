@@ -83,11 +83,35 @@ def can_withdraw(user_id, group_id):
     - User must be active member
     - User must have positive net principal balance
     - No pending withdrawal requests
+    - No pending/active loans (NEW REQUIREMENT)
     """
     # Check membership
     membership = get_membership(user_id, group_id)
     if not membership:
         return False, "You are not an active member of this group"
+
+    # Check for pending/active loans
+    active_loans = LoanRequest.query.filter(
+        LoanRequest.group_id == group_id,
+        LoanRequest.requested_by == user_id,
+        LoanRequest.is_active == True,
+        LoanRequest.status.in_([
+            LoanStatus.PENDING.value,
+            LoanStatus.APPROVED.value,
+            LoanStatus.DISBURSED.value
+        ])
+    ).all()
+
+    if active_loans:
+        # Check each loan status and provide specific messages
+        for loan in active_loans:
+            if loan.status == LoanStatus.PENDING.value:
+                return False, "You have a pending loan request. Cancel or wait for decision before withdrawing."
+            elif loan.status == LoanStatus.APPROVED.value:
+                return False, "You have an approved loan pending disbursement. Cannot withdraw while loan is pending."
+            elif loan.status == LoanStatus.DISBURSED.value:
+                remaining = loan.get_remaining_amount()
+                return False, f"You have an active loan with ₹{remaining:.2f} remaining. Repay loan first before withdrawing."
 
     # Check wallet and ledger
     wallet = GroupWallet.query.filter_by(group_id=group_id).first()
@@ -123,6 +147,7 @@ def can_approve_withdrawal(user_id, withdrawal_id):
     Requirements:
     - User must be group admin
     - Withdrawal must be in PENDING status
+    - Member must not have pending/active loans (NEW CHECK)
     """
     withdrawal = WithdrawalRequest.query.get(withdrawal_id)
     if not withdrawal:
@@ -133,6 +158,29 @@ def can_approve_withdrawal(user_id, withdrawal_id):
 
     if not is_group_admin(user_id, withdrawal.group_id):
         return False, "Only group admin can approve withdrawals"
+
+    # Check if member has pending/active loans
+    active_loans = LoanRequest.query.filter(
+        LoanRequest.group_id == withdrawal.group_id,
+        LoanRequest.requested_by == withdrawal.user_id,
+        LoanRequest.is_active == True,
+        LoanRequest.status.in_([
+            LoanStatus.PENDING.value,
+            LoanStatus.APPROVED.value,
+            LoanStatus.DISBURSED.value
+        ])
+    ).all()
+
+    if active_loans:
+        # Provide specific messages based on loan status
+        for loan in active_loans:
+            if loan.status == LoanStatus.PENDING.value:
+                return False, "Member has a pending loan request. Cannot approve withdrawal."
+            elif loan.status == LoanStatus.APPROVED.value:
+                return False, "Member has an approved loan pending disbursement. Cannot approve withdrawal."
+            elif loan.status == LoanStatus.DISBURSED.value:
+                remaining = loan.get_remaining_amount()
+                return False, f"Member has an active loan with ₹{remaining:.2f} remaining. Cannot approve withdrawal."
 
     # Check if group has sufficient balance
     wallet = GroupWallet.query.filter_by(group_id=withdrawal.group_id).first()
@@ -304,10 +352,39 @@ def can_leave_group(user_id, group_id):
     - User must NOT have active/unpaid loans
     - If admin: must transfer admin rights first
     - No pending withdrawal requests
+
+    Special exception: If user is the only member AND wallet balance is zero,
+    allow leaving (group will be deleted automatically).
     """
     membership = get_membership(user_id, group_id)
     if not membership:
         return False, "You are not a member of this group"
+
+    # Check if this is the only active member AND wallet balance is zero
+    active_members_count = GroupMember.query.filter_by(
+        group_id=group_id,
+        is_active=True
+    ).count()
+
+    wallet = GroupWallet.query.filter_by(group_id=group_id).first()
+    wallet_balance = wallet.balance if wallet else 0
+
+    # Special case: if this is the only member AND wallet balance is zero
+    # Skip most checks since group will be deleted
+    if active_members_count == 1 and wallet_balance == 0:
+        # Still check for pending withdrawal requests
+        pending_withdrawals = WithdrawalRequest.query.filter_by(
+            user_id=user_id,
+            group_id=group_id,
+            status=WithdrawalStatus.PENDING.value
+        ).count()
+
+        if pending_withdrawals > 0:
+            return False, "You have pending withdrawal requests. Please resolve them first."
+
+        return True, "Last member can leave (group will be deleted)"
+
+    # NORMAL CHECKS (for non-last members or when wallet has balance)
 
     # Check for pending withdrawal requests
     pending_withdrawals = WithdrawalRequest.query.filter_by(
@@ -362,10 +439,18 @@ def can_leave_group(user_id, group_id):
         ).count()
 
         if admin_count == 1:
-            return False, "You are the only admin. Transfer admin rights first."
+            # But check if this is the only member overall
+            if active_members_count == 1:
+                # Special case: only admin and only member
+                # Check wallet balance - if zero, allow leaving (handled by special case above)
+                # If not zero, show appropriate message
+                if wallet_balance > 0:
+                    return False, "You are the only admin and member. Withdraw your contributions first or delete the group."
+                # If wallet_balance == 0, this would have been caught by the special case above
+            else:
+                return False, "You are the only admin. Transfer admin rights first."
 
     return True, None
-
 
 # ============================================================
 # ADMIN TRANSFER AUTHORIZATION

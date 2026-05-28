@@ -229,6 +229,7 @@ def remove_member_route(group_id, user_id):
     return redirect(url_for('groups.view_group', group_id=group_id))
 
 # ============== LEAVE GROUP ROUTE ==============
+# ============== LEAVE GROUP ROUTE ==============
 @groups_bp.route('/groups/<int:group_id>/leave', methods=['GET', 'POST'])
 @login_required
 def leave_group_route(group_id):
@@ -249,16 +250,71 @@ def leave_group_route(group_id):
         ).count()
 
         if admin_count <= 1:
-            flash('Cannot leave group as you are the only admin. Transfer admin rights first or delete the group.',
-                  'danger')
-            return redirect(url_for('groups.view_group', group_id=group_id))
+            # Check if admin is the ONLY member AND wallet balance is zero
+            active_members_count = GroupMember.query.filter_by(
+                group_id=group_id,
+                is_active=True
+            ).count()
+
+            # Get wallet balance
+            wallet_balance = group.wallet.balance if group.wallet else 0
+
+            # If admin is the only member AND wallet balance is zero, allow leaving (which will delete group)
+            if active_members_count == 1 and wallet_balance == 0:
+                # This is okay - admin can leave and group will be deleted
+                pass
+            else:
+                flash('Cannot leave group as you are the only admin. Transfer admin rights first or delete the group.',
+                      'danger')
+                return redirect(url_for('groups.view_group', group_id=group_id))
 
     if request.method == 'POST':
         try:
-            # Use the leave_group function from membership_service
-            leave_group(group_id, current_user.id, "Member left voluntarily")
-            flash(f'You have left {group.name}', 'success')
-            return redirect(url_for('groups.list_groups'))
+            # Check if this is the last member leaving
+            active_members_count = GroupMember.query.filter_by(
+                group_id=group_id,
+                is_active=True
+            ).count()
+
+            # If admin is leaving and they're the only member AND wallet balance is zero
+            # then delete the group instead of just leaving
+            if is_admin and active_members_count == 1 and (group.wallet and group.wallet.balance == 0):
+                try:
+                    # Delete the group
+                    group.is_active = False
+                    group.deleted_at = datetime.utcnow()
+                    group.deleted_by = current_user.id
+
+                    # Soft delete wallet if exists
+                    if group.wallet:
+                        group.wallet.is_active = False
+
+                    # Soft delete the membership
+                    membership = GroupMember.query.filter_by(
+                        group_id=group_id,
+                        user_id=current_user.id,
+                        is_active=True
+                    ).first()
+                    if membership:
+                        membership.soft_delete(reason="Last admin left, group deleted")
+
+                    db.session.commit()
+
+                    flash(
+                        f'You have left {group.name}. Since you were the only member with zero balance, the group has been deleted.',
+                        'success')
+                    return redirect(url_for('groups.list_groups'))
+
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Error deleting group: {str(e)}', 'danger')
+                    return redirect(url_for('groups.view_group', group_id=group_id))
+            else:
+                # Use the normal leave_group function
+                leave_group(group_id, current_user.id, "Member left voluntarily")
+                flash(f'You have left {group.name}', 'success')
+                return redirect(url_for('groups.list_groups'))
+
         except (MembershipError, AuthorizationError) as e:
             flash(str(e), 'danger')
 

@@ -213,6 +213,8 @@ def cast_vote(loan_id, user_id, approved, comment=None):
 # APPROVE LOAN WITH INTEREST CALCULATION
 # ============================================================
 
+# In loan_service_new.py, update the approve_loan_with_interest function:
+
 def approve_loan_with_interest(loan, is_regeneration=False):
     """
     Called when loan gets majority approval OR when terms are updated.
@@ -220,22 +222,39 @@ def approve_loan_with_interest(loan, is_regeneration=False):
     IMPORTANT CHANGE:
     - We now only apply group defaults if the value is NOT already set on the loan.
     - During regeneration (edit), we preserve the values already set on the loan object.
+    - WITH MINIMUM EMI DURATION VALIDATION
     """
     from app.extensions import db
 
     group = loan.group
 
+    # ===== VALIDATE MINIMUM EMI DURATION =====
+    if loan.loan_duration_months and loan.loan_duration_months < group.min_emi_duration_months:
+        raise LoanError(
+            f"Loan duration ({loan.loan_duration_months} months) is shorter than "
+            f"group minimum ({group.min_emi_duration_months} months). "
+            f"Please increase loan duration."
+        )
+
     # ===== STEP 1: Get loan terms from group defaults ONLY if not already set =====
-    # FIXED: Removed 'or is_regeneration' to prevent overriding edited values
     if loan.interest_rate is None:
         loan.interest_rate = group.default_interest_rate
 
     if loan.loan_duration_months is None:
         loan.loan_duration_months = group.default_loan_duration_months
 
+        # Validate after setting default
+        if loan.loan_duration_months < group.min_emi_duration_months:
+            raise LoanError(
+                f"Default loan duration ({loan.loan_duration_months} months) is shorter than "
+                f"group minimum ({group.min_emi_duration_months} months). "
+                f"Please update group settings."
+            )
+
     if loan.repayment_type is None:
         loan.repayment_type = group.default_repayment_type
 
+    # Rest of the function remains the same...
     # Ensure approved_amount is set (this one can be refreshed during regeneration)
     if not loan.approved_amount:
         loan.approved_amount = loan.amount
@@ -292,6 +311,7 @@ def approve_loan_with_interest(loan, is_regeneration=False):
     Principal:      ₹{loan.approved_amount:,}
     Interest Rate:  {loan.interest_rate}% p.a.
     Duration:       {loan.loan_duration_months} months
+    Min Duration:   {group.min_emi_duration_months} months (Group Policy)
     Repayment Type: {loan.repayment_type}
     ─────────────────────────────
     Total Interest: ₹{loan.total_interest:,}
@@ -634,3 +654,44 @@ def can_regenerate_emi_schedule(loan_id):
         return False, "Loan is already fully repaid"
 
     return True, "EMI schedule can be regenerated"
+
+
+# Add these functions to loan_service_new.py after the existing ones:
+
+def has_pending_payment_this_month(loan_id, user_id):
+    """
+    Check if user has already submitted a payment for this month
+    Returns True if payment already submitted
+    """
+    current_month = datetime.utcnow().month
+    current_year = datetime.utcnow().year
+
+    pending = LoanRepayment.query.filter(
+        LoanRepayment.loan_id == loan_id,
+        LoanRepayment.paid_by == user_id,
+        LoanRepayment.status == RepaymentStatus.PENDING.value,
+        db.extract('month', LoanRepayment.submitted_at) == current_month,
+        db.extract('year', LoanRepayment.submitted_at) == current_year
+    ).first()
+
+    return pending is not None
+
+
+def can_make_full_payment(loan_id):
+    """
+    Check if loan taker can make full payment
+    Returns True only if paid EMIs >= minimum EMI duration
+    """
+    loan = LoanRequest.query.get(loan_id)
+    if not loan:
+        return False
+
+    paid_emis = EMISchedule.query.filter_by(
+        loan_id=loan_id,
+        is_paid=True
+    ).count()
+
+    remaining_emis = loan.loan_duration_months - paid_emis
+
+    # Can make full payment only if paid EMIs >= minimum EMI duration
+    return paid_emis >= loan.group.min_emi_duration_months

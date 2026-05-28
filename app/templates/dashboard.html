@@ -24,7 +24,7 @@
 </div>
 
 <!-- Alerts -->
-{% if pending_votes > 0 or pending_repayment_approvals > 0 %}
+{% if pending_votes > 0 or pending_repayment_approvals > 0 or pending_withdrawal_approvals > 0 %}
 <div class="row mb-3">
     <div class="col-12">
         {% if pending_votes > 0 %}
@@ -39,12 +39,24 @@
         {% endif %}
 
         {% if pending_repayment_approvals > 0 %}
-        <div class="alert alert-info d-flex justify-content-between align-items-center py-2 mb-0">
+        <div class="alert alert-info d-flex justify-content-between align-items-center py-2 mb-2">
             <span><i class="bi bi-clock-history"></i> {{ pending_repayment_approvals }} repayment(s) awaiting approval</span>
             {% if pending_repayment_loan %}
             <a href="{{ url_for('loans.view_loan', loan_id=pending_repayment_loan.id) }}" class="btn btn-sm btn-info">Review</a>
             {% else %}
             <a href="{{ url_for('admin.pending_repayments') }}" class="btn btn-sm btn-info">Review</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if pending_withdrawal_approvals > 0 %}
+        <div class="alert alert-primary d-flex justify-content-between align-items-center py-2 mb-0">
+            <span><i class="bi bi-clock"></i> {{ pending_withdrawal_approvals }} withdrawal(s) awaiting approval</span>
+            {% if pending_withdrawal_request %}
+            <!-- FIXED: Changed from wallet.pending_withdrawals to admin.pending_withdrawals -->
+            <a href="{{ url_for('admin.pending_withdrawals', group_id=pending_withdrawal_request.group_id) }}" class="btn btn-sm btn-primary">Review</a>
+            {% else %}
+            <a href="#" class="btn btn-sm btn-primary disabled">Review</a>
             {% endif %}
         </div>
         {% endif %}
@@ -66,7 +78,7 @@
         <div class="card text-center py-2">
             <div class="card-body py-2">
                 <small class="text-muted">My Contributions</small>
-                <h4 class="mb-0 text-success">₹{{ "%.0f"|format(total_contributions) }}</h4>
+                <h4 class="mb-0 text-success">₹{{ "{:,.0f}".format(total_contributions) }}</h4>
             </div>
         </div>
     </div>
@@ -74,7 +86,7 @@
         <div class="card text-center py-2">
             <div class="card-body py-2">
                 <small class="text-muted">My Interest Earned</small>
-                <h4 class="mb-0 text-primary">₹{{ "%.0f"|format(total_interest_earned) }}</h4>
+                <h4 class="mb-0 text-primary">₹{{ "{:,.0f}".format(total_interest_earned) }}</h4>
             </div>
         </div>
     </div>
@@ -82,31 +94,41 @@
         <div class="card text-center py-2">
             <div class="card-body py-2">
                 <small class="text-muted">My Outstanding</small>
-                <h4 class="mb-0 text-danger">₹{{ "%.0f"|format(total_outstanding) }}</h4>
+                <h4 class="mb-0 text-danger">₹{{ "{:,.0f}".format(total_outstanding) }}</h4>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Next EMI Due -->
+<!-- Next EMI Due - Only show if due within 5 days -->
 {% if next_emi %}
-<div class="row mb-3">
-    <div class="col-12">
-        <div class="card border-warning">
-            <div class="card-body py-2 d-flex justify-content-between align-items-center">
-                <div>
-                    <i class="bi bi-calendar-event text-warning"></i>
-                    <strong>Your Next EMI:</strong>
-                    ₹{{ "%.0f"|format(next_emi.emi_amount) }} on {{ next_emi.due_date.strftime('%d %b %Y') }}
-                    <span class="text-muted">({{ next_emi.loan.group.name }})</span>
+    {% set days_until_due = (next_emi.due_date - now.date()).days %}
+    {% if days_until_due <= 5 and days_until_due >= 0 %}
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-body py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="bi bi-calendar-event text-warning"></i>
+                        <strong>Your Next EMI:</strong>
+                        ₹{{ "{:,.0f}".format(next_emi.emi_amount) }} on {{ next_emi.due_date.strftime('%d %b %Y') }}
+                        <span class="text-muted">({{ next_emi.loan.group.name }})</span>
+                        {% if days_until_due == 0 %}
+                            <span class="badge bg-danger ms-2">Due Today</span>
+                        {% elif days_until_due == 1 %}
+                            <span class="badge bg-warning ms-2">Due Tomorrow</span>
+                        {% else %}
+                            <span class="badge bg-info ms-2">Due in {{ days_until_due }} days</span>
+                        {% endif %}
+                    </div>
+                    <a href="{{ url_for('loans.repay_loan', loan_id=next_emi.loan_id) }}" class="btn btn-sm btn-warning">
+                        Pay Now
+                    </a>
                 </div>
-                <a href="{{ url_for('loans.repay_loan', loan_id=next_emi.loan_id) }}" class="btn btn-sm btn-warning">
-                    Pay Now
-                </a>
             </div>
         </div>
     </div>
-</div>
+    {% endif %}
 {% endif %}
 
 <!-- Main Content -->
@@ -132,14 +154,14 @@
                             </div>
                             <div class="flex-grow-1">
                                 <div class="fw-bold text-dark mb-0">
-                                    {{ group.name[:30] }}{% if group.name|length > 25 %}...{% endif %}
+                                    {{ group.name[:30] }}{% if group.name|length > 30 %}...{% endif %}
                                 </div>
                                 <div class="text-muted" style="font-size: 0.85rem;">
                                     {{ group.get_active_member_count() }} members
                                     {% if group.wallet %}
                                     <span class="mx-1">-</span>
                                     <span class="text-success fw-medium">
-                                        ₹{{ "%.0f"|format(group.wallet.balance) }}
+                                        ₹{{ "{:,.0f}".format(group.wallet.balance) }}
                                     </span>
                                     {% endif %}
                                 </div>
@@ -171,11 +193,11 @@
                 <ul class="list-group list-group-flush">
                     {% for loan in active_loans[:4] %}
                     {% set remaining = loan.get_remaining_amount() %}
-                    {% set progress = ((loan.total_repaid / loan.total_repayable) * 100) if loan.total_repayable else 0 %}
+                    {% set progress = ((loan.total_repaid / loan.total_repayable) * 100) if loan.total_repayable and loan.total_repayable > 0 else 0 %}
                     <li class="list-group-item py-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <strong>{{ loan.group.name }}</strong>
-                            <small class="text-danger">₹{{ "%.0f"|format(remaining) }}</small>
+                            <small class="text-danger">₹{{ "{:,.0f}".format(remaining) }}</small>
                         </div>
                         <div class="progress mt-1" style="height: 5px;">
                             <div class="progress-bar bg-success" style="width: {{ progress }}%"></div>

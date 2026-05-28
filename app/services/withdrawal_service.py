@@ -9,7 +9,7 @@ from datetime import datetime
 from app.extensions import db
 from app.models import (
     WithdrawalRequest, Group, GroupMember, MemberLedger, GroupWallet,
-    WithdrawalStatus, MemberRole
+    WithdrawalStatus, MemberRole, LoanRequest, LoanStatus
 )
 from app.services.authorization_service import (
     can_withdraw, can_approve_withdrawal, is_group_admin, AuthorizationError
@@ -47,6 +47,28 @@ def create_withdrawal_request(user_id, group_id, principal_amount,
         allowed, reason = can_withdraw(user_id, group_id)
         if not allowed:
             raise AuthorizationError(reason)
+
+        # Additional loan check for better error messages
+        active_loans = LoanRequest.query.filter(
+            LoanRequest.group_id == group_id,
+            LoanRequest.requested_by == user_id,
+            LoanRequest.is_active == True,
+            LoanRequest.status.in_([
+                LoanStatus.PENDING.value,
+                LoanStatus.APPROVED.value,
+                LoanStatus.DISBURSED.value
+            ])
+        ).all()
+
+        if active_loans:
+            # This check should already be covered by can_withdraw, but add specific message
+            loan_statuses = [loan.status for loan in active_loans]
+            if LoanStatus.PENDING.value in loan_statuses:
+                raise WithdrawalError("You cannot withdraw while you have a pending loan request")
+            elif LoanStatus.APPROVED.value in loan_statuses:
+                raise WithdrawalError("You cannot withdraw while you have an approved loan awaiting disbursement")
+            elif LoanStatus.DISBURSED.value in loan_statuses:
+                raise WithdrawalError("You cannot withdraw while you have an active loan. Repay loan first.")
 
         # Get wallet and ledger
         wallet = GroupWallet.query.filter_by(group_id=group_id).first()
@@ -122,6 +144,21 @@ def approve_withdrawal(withdrawal_id, admin_user_id):
         withdrawal = WithdrawalRequest.query.get(withdrawal_id)
         if not withdrawal:
             raise WithdrawalError("Withdrawal request not found")
+
+        # Additional loan check before approval
+        active_loans = LoanRequest.query.filter(
+            LoanRequest.group_id == withdrawal.group_id,
+            LoanRequest.requested_by == withdrawal.user_id,
+            LoanRequest.is_active == True,
+            LoanRequest.status.in_([
+                LoanStatus.PENDING.value,
+                LoanStatus.APPROVED.value,
+                LoanStatus.DISBURSED.value
+            ])
+        ).all()
+
+        if active_loans:
+            raise WithdrawalError("Member has pending or active loans. Cannot approve withdrawal.")
 
         # Approve the request
         withdrawal.approve(admin_user_id)
@@ -235,6 +272,31 @@ def get_withdrawable_amounts(user_id, group_id):
             "group_balance": wallet.balance
         }
 
+    # Check if member has active loans
+    active_loans = LoanRequest.query.filter(
+        LoanRequest.group_id == group_id,
+        LoanRequest.requested_by == user_id,
+        LoanRequest.is_active == True,
+        LoanRequest.status.in_([
+            LoanStatus.PENDING.value,
+            LoanStatus.APPROVED.value,
+            LoanStatus.DISBURSED.value
+        ])
+    ).count()
+
+    # If member has active loans, they cannot withdraw
+    if active_loans > 0:
+        return {
+            "principal_available": 0,
+            "interest_available": 0,
+            "total_available": 0,
+            "group_balance": wallet.balance,
+            "member_net_principal": ledger.net_principal,
+            "member_net_interest": ledger.net_interest,
+            "has_active_loans": True,
+            "message": "Cannot withdraw while you have active or pending loans"
+        }
+
     # Can't withdraw more than group has
     principal_available = min(ledger.net_principal, wallet.balance)
     interest_available = ledger.net_interest
@@ -246,7 +308,8 @@ def get_withdrawable_amounts(user_id, group_id):
         "total_available": total_available,
         "group_balance": wallet.balance,
         "member_net_principal": ledger.net_principal,
-        "member_net_interest": ledger.net_interest
+        "member_net_interest": ledger.net_interest,
+        "has_active_loans": False
     }
 
 
